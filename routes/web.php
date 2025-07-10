@@ -2,6 +2,7 @@
 
 use Illuminate\Support\Facades\Route;
 use Livewire\Volt\Volt;
+use App\Http\Livewire\VisitorForm;
 
 Route::get('/', function () {
     return view('welcome');
@@ -19,8 +20,4 @@ Route::middleware(['auth'])->group(function () {
     Volt::route('settings/appearance', 'settings.appearance')->name('settings.appearance');
 });
 
-Route::get('/visitor-form', function () {
-    return view('visitor-form');
-});
-
-require __DIR__.'/auth.php';
+Route::get('/visitor-form', VisitorForm::class);

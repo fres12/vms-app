@@ -8,14 +8,15 @@
 <body class="bg-gray-100 dark:bg-neutral-900 min-h-screen flex items-center justify-center">
     <div class="max-w-xl w-full bg-white dark:bg-neutral-900 p-8 rounded-xl shadow">
         <h2 class="text-2xl font-bold mb-6 text-center">Visitor Registration</h2>
-        <form>
+        <form wire:submit.prevent="submit">
             <div class="mb-4">
                 <label class="block mb-1 font-medium">National Identification Number</label>
                 <input type="text" class="w-full border rounded px-3 py-2 focus:outline-none focus:ring focus:border-blue-400" placeholder="Enter NIK">
             </div>
             <div class="mb-4">
                 <label class="block mb-1 font-medium">National ID card photo</label>
-                <input type="file" class="w-full border rounded px-3 py-2 focus:outline-none focus:ring focus:border-blue-400">
+                <input type="file" accept="image/*" class="w-full border rounded px-3 py-2 focus:outline-none focus:ring focus:border-blue-400" id="id_card_photo" onchange="previewImage(event, 'id_card_photo_preview')">
+                <img id="id_card_photo_preview" class="mt-2 rounded max-h-40 hidden" alt="Preview ID Card Photo">
             </div>
             <div class="mb-4">
                 <label class="block mb-1 font-medium">Full Name</label>
@@ -39,7 +40,11 @@
             </div>
             <div class="mb-4">
                 <label class="block mb-1 font-medium">Self Photo</label>
-                <input type="file" class="w-full border rounded px-3 py-2 focus:outline-none focus:ring focus:border-blue-400">
+                <input type="file" wire:model="self_photo" accept="image/*" class="w-full border rounded px-3 py-2">
+                @if ($self_photo)
+                    <img src="{{ $self_photo->temporaryUrl() }}" class="mt-2 rounded max-h-40" alt="Preview Self Photo">
+                @endif
+                @error('self_photo') <span class="text-red-500 text-sm">{{ $message }}</span> @enderror
             </div>
             <div class="mb-6 flex gap-4">
                 <div class="w-1/2">
