@@ -10,11 +10,11 @@
         <h2 class="text-2xl font-bold mb-6 text-center">Visitor Registration</h2>
         <form>
             <div class="mb-4">
-                <label class="block mb-1 font-medium">NIK</label>
+                <label class="block mb-1 font-medium">National Identification Number</label>
                 <input type="text" class="w-full border rounded px-3 py-2 focus:outline-none focus:ring focus:border-blue-400" placeholder="Enter NIK">
             </div>
             <div class="mb-4">
-                <label class="block mb-1 font-medium">Foto KTP</label>
+                <label class="block mb-1 font-medium">National ID card photo</label>
                 <input type="file" class="w-full border rounded px-3 py-2 focus:outline-none focus:ring focus:border-blue-400">
             </div>
             <div class="mb-4">
@@ -30,7 +30,7 @@
                 <input type="text" class="w-full border rounded px-3 py-2 focus:outline-none focus:ring focus:border-blue-400" placeholder="Enter phone number">
             </div>
             <div class="mb-4">
-                <label class="block mb-1 font-medium">Dept Purpose</label>
+                <label class="block mb-1 font-medium">Department Purpose</label>
                 <input type="text" class="w-full border rounded px-3 py-2 focus:outline-none focus:ring focus:border-blue-400" placeholder="Enter department purpose">
             </div>
             <div class="mb-4">
@@ -38,7 +38,7 @@
                 <input type="text" class="w-full border rounded px-3 py-2 focus:outline-none focus:ring focus:border-blue-400" placeholder="Enter section purpose">
             </div>
             <div class="mb-4">
-                <label class="block mb-1 font-medium">Foto Diri</label>
+                <label class="block mb-1 font-medium">Self Photo</label>
                 <input type="file" class="w-full border rounded px-3 py-2 focus:outline-none focus:ring focus:border-blue-400">
             </div>
             <div class="mb-6 flex gap-4">
@@ -47,7 +47,7 @@
                     <input type="date" class="w-full border rounded px-3 py-2 focus:outline-none focus:ring focus:border-blue-400">
                 </div>
                 <div class="w-1/2">
-                    <label class="block mb-1 font-medium">Visit Time <span class="text-xs text-gray-500">(24h)</span></label>
+                    <label class="block mb-1 font-medium">Visit Time</label>
                     <input type="time" class="w-full border rounded px-3 py-2 focus:outline-none focus:ring focus:border-blue-400" step="60" placeholder="HH:MM">
                 </div>
             </div>
