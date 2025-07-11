@@ -20,7 +20,7 @@ return new class extends Migration
             $table->string('phone', 255)->nullable();
             $table->string('department_purpose', 255)->nullable();
             $table->string('section_purpose', 255)->nullable();
-            $table->string('self_photo', 255)->nullable();
+            $table->string('self_photo')->nullable();
             $table->dateTime('visit_datetime');
             $table->timestamps();
         });
