@@ -8,6 +8,13 @@
 <body class="bg-gray-100 dark:bg-neutral-900 min-h-screen flex items-center justify-center">
     <div class="max-w-xl w-full bg-white dark:bg-neutral-900 p-8 rounded-xl shadow">
         <h2 class="text-2xl font-bold mb-6 text-center">Visitor Registration</h2>
+        
+        @if(session('success'))
+            <div class="mb-4 p-4 bg-green-100 text-green-700 rounded">
+                {{ session('success') }}
+            </div>
+        @endif
+
         <form action="{{ route('visitors.store') }}" method="POST" enctype="multipart/form-data">
             @csrf
             <div class="mb-4">
@@ -15,18 +22,20 @@
                 <input type="text" name="full_name" class="w-full border rounded px-3 py-2" required>
             </div>
             <div class="mb-4">
-                <label class="block mb-1 font-medium">National Identification Number</label>
+                <label class="block mb-1 font-medium">National ID Number (NIK)</label>
                 <input type="text" name="nik" class="w-full border rounded px-3 py-2" required>
             </div>
             <div class="mb-4">
-                <label class="block mb-1 font-medium">National ID Card Photo</label>
-                <input type="file" name="id_card_photo" accept="image/*" class="w-full border rounded px-3 py-2" onchange="previewImage(event, 'id_card_photo_preview')">
-                <img id="id_card_photo_preview" class="mt-2 rounded max-h-40 hidden" alt="Preview ID Card Photo">
+                <label class="block mb-1 font-medium">ID Card Photo</label>
+                <input type="file" name="id_card_photo" accept="image/*" class="w-full border rounded px-3 py-2" 
+                       onchange="previewImage(event, 'id_card_preview')" required>
+                <img id="id_card_preview" class="mt-2 rounded max-h-40 hidden">
             </div>
             <div class="mb-4">
                 <label class="block mb-1 font-medium">Self Photo</label>
-                <input type="file" name="self_photo" accept="image/*" class="w-full border rounded px-3 py-2" onchange="previewImage(event, 'self_photo_preview')">
-                <img id="self_photo_preview" class="mt-2 rounded max-h-40 hidden" alt="Preview Self Photo">
+                <input type="file" name="self_photo" accept="image/*" class="w-full border rounded px-3 py-2" 
+                       onchange="previewImage(event, 'self_photo_preview')" required>
+                <img id="self_photo_preview" class="mt-2 rounded max-h-40 hidden">
             </div>
             <div class="mb-4">
                 <label class="block mb-1 font-medium">Company</label>
@@ -55,10 +64,12 @@
             <button type="submit" class="w-full bg-blue-600 text-white py-2 rounded hover:bg-blue-700 transition">Submit</button>
         </form>
     </div>
+
     <script>
-        function previewImage(event, previewElementId) {
+        function previewImage(event, previewId) {
             const input = event.target;
-            const preview = document.getElementById(previewElementId);
+            const preview = document.getElementById(previewId);
+            
             if (input.files && input.files[0]) {
                 const reader = new FileReader();
                 reader.onload = function(e) {

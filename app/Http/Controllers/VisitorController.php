@@ -24,30 +24,30 @@ class VisitorController extends Controller
         ]);
 
         // Upload ID Card Photo
-        $idCardPhotoName = null;
         if ($request->hasFile('id_card_photo')) {
             $idCardPhotoName = uniqid('idcard_') . '.' . $request->file('id_card_photo')->getClientOriginalExtension();
-            $request->file('id_card_photo')->storeAs('public/idcard_photo', $idCardPhotoName);
+            $request->file('id_card_photo')->move(public_path('storage/idcard_photo'), $idCardPhotoName);
+            $idCardPhotoPath = 'idcard_photo/' . $idCardPhotoName;
         }
 
         // Upload Self Photo
-        $selfPhotoName = null;
         if ($request->hasFile('self_photo')) {
             $selfPhotoName = uniqid('self_') . '.' . $request->file('self_photo')->getClientOriginalExtension();
-            $request->file('self_photo')->storeAs('public/self_photo', $selfPhotoName);
+            $request->file('self_photo')->move(public_path('storage/self_photo'), $selfPhotoName);
+            $selfPhotoPath = 'self_photo/' . $selfPhotoName;
         }
 
-        $visit_datetime = \Carbon\Carbon::parse($request->visit_date . ' ' . $request->visit_time);
+        $visit_datetime = Carbon::parse($request->visit_date . ' ' . $request->visit_time);
 
-        \DB::table('visitors')->insert([
+        DB::table('visitors')->insert([
             'nik' => $request->nik,
-            'id_card_photo' => $idCardPhotoName,
+            'id_card_photo' => $idCardPhotoPath ?? null,
             'full_name' => $request->full_name,
             'company' => $request->company,
             'phone' => $request->phone,
             'department_purpose' => $request->department_purpose,
             'section_purpose' => $request->section_purpose,
-            'self_photo' => $selfPhotoName,
+            'self_photo' => $selfPhotoPath ?? null,
             'visit_datetime' => $visit_datetime,
             'created_at' => now(),
             'updated_at' => now(),
