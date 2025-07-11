@@ -61,7 +61,14 @@
                 <label class="block mb-1 font-medium">Visit Time</label>
                 <input type="time" name="visit_time" class="w-full border rounded px-3 py-2" required>
             </div>
-            <button type="submit" class="w-full bg-blue-600 text-white py-2 rounded hover:bg-blue-700 transition">Submit</button>
+            <div class="mb-4">
+                <label class="inline-flex items-center">
+                    <input type="checkbox" id="pledgeCheckbox" name="pledge_agreement" required class="form-checkbox mr-2">
+                    <span>I have read and agree with to the the HMMI <a href="/visitor-pledge" target="_blank" class="text-blue-600 underline hover:text-blue-800">visitor pledge</a></span>
+                </label>
+            </div>
+            
+            <button id="submitBtn" type="submit" class="w-full bg-blue-600 text-white py-2 rounded hover:bg-blue-700 transition opacity-50 cursor-not-allowed" disabled>Submit</button>
         </form>
     </div>
 
@@ -82,6 +89,21 @@
                 preview.classList.add('hidden');
             }
         }
+
+        // Enable/disable submit button based on pledge checkbox
+        document.addEventListener('DOMContentLoaded', function() {
+            const pledgeCheckbox = document.getElementById('pledgeCheckbox');
+            const submitBtn = document.getElementById('submitBtn');
+            pledgeCheckbox.addEventListener('change', function() {
+                if (this.checked) {
+                    submitBtn.disabled = false;
+                    submitBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+                } else {
+                    submitBtn.disabled = true;
+                    submitBtn.classList.add('opacity-50', 'cursor-not-allowed');
+                }
+            });
+        });
     </script>
 </body>
 </html>

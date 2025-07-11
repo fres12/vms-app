@@ -23,3 +23,4 @@ Route::middleware(['auth'])->group(function () {
 
 Route::view('/visitor-form', 'visitor-form');
 Route::post('/visitors', [VisitorController::class, 'store'])->name('visitors.store');
+Route::view('/visitor-pledge', 'visitor-pledge');
