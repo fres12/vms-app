@@ -23,6 +23,7 @@ return new class extends Migration
             $table->string('self_photo')->nullable();
             $table->dateTime('visit_datetime');
             $table->timestamps();
+            $table->string('status', 255)->nullable();
         });
     }
 

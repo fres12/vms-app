@@ -49,10 +49,17 @@ class VisitorController extends Controller
             'section_purpose' => $request->section_purpose,
             'self_photo' => $selfPhotoPath ?? null,
             'visit_datetime' => $visit_datetime,
+            'status' => 'For review',
             'created_at' => now(),
             'updated_at' => now(),
         ]);
 
         return redirect()->back()->with('success', 'Visitor saved!');
+    }
+
+    public function index()
+    {
+        $visitors = \DB::table('visitors')->orderByDesc('created_at')->get();
+        return view('visitor-list', compact('visitors'));
     }
 }
