@@ -85,7 +85,33 @@
             <div class="value">{{ $visitorData['created_at'] }}</div>
         </div>
         
-        <p><strong>Note:</strong> This visitor has uploaded their ID card photo and self photo. Please review the registration in the admin panel.</p>
+        <p><strong>Note:</strong> This visitor has uploaded their ID card photo and self photo. Please review and take action below.</p>
+        
+        <div style="text-align: center; margin: 30px 0;">
+            <h3 style="color: #374151; margin-bottom: 20px;">Visitor Approval</h3>
+            <p style="color: #6b7280; margin-bottom: 20px;">Please review this visitor registration and take action:</p>
+            
+            <div style="display: inline-block; margin: 0 10px;">
+                <a href="{{ url('/visitors/' . $visitorData['id'] . '/approve') }}" 
+                   style="background-color: #10b981; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; display: inline-block; font-weight: bold;">
+                    ✅ Approve Visitor
+                </a>
+            </div>
+            
+            <div style="display: inline-block; margin: 0 10px;">
+                <a href="{{ url('/visitors/' . $visitorData['id'] . '/reject') }}" 
+                   style="background-color: #ef4444; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; display: inline-block; font-weight: bold;">
+                    ❌ Reject Visitor
+                </a>
+            </div>
+        </div>
+        
+        <div style="background-color: #f3f4f6; padding: 15px; border-radius: 5px; margin-top: 20px;">
+            <p style="margin: 0; color: #6b7280; font-size: 14px;">
+                <strong>Security Note:</strong> These links are unique to this visitor registration. 
+                Once an action is taken, the status will be updated and the links will no longer work.
+            </p>
+        </div>
     </div>
     
     <div class="footer">

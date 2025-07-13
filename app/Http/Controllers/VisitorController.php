@@ -55,7 +55,7 @@ class VisitorController extends Controller
                 ->withInput();
         }
 
-        DB::table('visitors')->insert([
+        $visitorId = DB::table('visitors')->insertGetId([
             'nik' => $request->nik,
             'id_card_photo' => $idCardPhotoPath ?? null,
             'full_name' => $request->full_name,
@@ -73,6 +73,7 @@ class VisitorController extends Controller
         // Send email notification if Department A is selected
         if ($request->department_purpose === 'Dept A') {
             $visitorData = [
+                'id' => $visitorId,
                 'full_name' => $request->full_name,
                 'nik' => $request->nik,
                 'company' => $request->company,
@@ -98,5 +99,87 @@ class VisitorController extends Controller
     {
         $visitors = \DB::table('visitors')->orderByDesc('created_at')->get();
         return view('visitor-list', compact('visitors'));
+    }
+
+    public function approve($id)
+    {
+        try {
+            $visitor = DB::table('visitors')->where('id', $id)->first();
+            
+            if (!$visitor) {
+                return view('visitor-response', [
+                    'success' => false,
+                    'message' => 'Visitor not found.',
+                    'visitor' => null
+                ]);
+            }
+
+            if ($visitor->status !== 'For review') {
+                return view('visitor-response', [
+                    'success' => false,
+                    'message' => 'This visitor has already been processed.',
+                    'visitor' => $visitor
+                ]);
+            }
+
+            DB::table('visitors')->where('id', $id)->update([
+                'status' => 'Accepted',
+                'updated_at' => now()
+            ]);
+
+            return view('visitor-response', [
+                'success' => true,
+                'message' => 'Visitor has been approved successfully!',
+                'visitor' => $visitor
+            ]);
+
+        } catch (\Exception $e) {
+            return view('visitor-response', [
+                'success' => false,
+                'message' => 'An error occurred while processing the request.',
+                'visitor' => null
+            ]);
+        }
+    }
+
+    public function reject($id)
+    {
+        try {
+            $visitor = DB::table('visitors')->where('id', $id)->first();
+            
+            if (!$visitor) {
+                return view('visitor-response', [
+                    'success' => false,
+                    'message' => 'Visitor not found.',
+                    'visitor' => null
+                ]);
+            }
+
+            if ($visitor->status !== 'For review') {
+                return view('visitor-response', [
+                    'success' => false,
+                    'message' => 'This visitor has already been processed.',
+                    'visitor' => $visitor
+                ]);
+            }
+
+            DB::table('visitors')->where('id', $id)->update([
+                'status' => 'Rejected',
+                'updated_at' => now()
+            ]);
+
+            return view('visitor-response', [
+                'success' => true,
+                'message' => 'Visitor has been rejected.',
+                'visitor' => $visitor
+            ]);
+
+        } catch (\Exception $e) {
+            return view('visitor-response', [
+                'success' => false,
+                'message' => 'An error occurred while processing the request.',
+                'visitor' => null
+            ]);
+        }
     }
 }

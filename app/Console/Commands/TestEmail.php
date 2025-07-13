@@ -30,6 +30,7 @@ class TestEmail extends Command
         $this->info('Testing email functionality...');
 
         $testVisitorData = [
+            'id' => 999, // Test ID for email testing
             'full_name' => 'Test Visitor',
             'nik' => '1234567890123456',
             'company' => 'Test Company',

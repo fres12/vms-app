@@ -89,6 +89,13 @@ Email akan berisi:
 - Department & Section purpose
 - Visit date & time
 - Registration date
+- **Tombol Approve/Reject** untuk mengambil tindakan langsung dari email
+
+## Approval System
+- **Approve Button**: Mengubah status dari "For review" menjadi "Accepted"
+- **Reject Button**: Mengubah status dari "For review" menjadi "Rejected"
+- **Security**: Link hanya bekerja sekali, setelah action diambil link tidak bisa digunakan lagi
+- **Response Page**: Menampilkan konfirmasi setelah approve/reject dengan detail visitor
 
 ## Security Notes
 - Email hanya dikirim ketika "Dept A" dipilih
