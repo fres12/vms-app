@@ -8,8 +8,11 @@
 <body class="bg-gray-100 dark:bg-neutral-900 min-h-screen p-8">
     <div class="max-w-7xl mx-auto bg-white dark:bg-neutral-900 p-8 px-4 sm:px-8 rounded-xl shadow">
         <h2 class="text-2xl font-bold mb-6 text-center">Visitor Registration List</h2>
+        <div class="flex justify-end mb-4">
+            <a href="{{ route('visitors.export') }}" class="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 transition">Export to Excel</a>
+        </div>
         <div class="overflow-x-auto">
-            <table class="min-w-full w-full border text-sm">
+            <table class="min-w-[1200px] w-full border text-sm">
                 <thead>
                     <tr class="bg-gray-200 dark:bg-neutral-800">
                         <th class="px-3 py-2 border">No</th>
@@ -25,6 +28,7 @@
                         <th class="px-3 py-2 border">Self Photo</th>
                         <th class="px-3 py-2 border">Created At</th>
                         <th class="px-3 py-2 border">Status</th>
+                        <th class="px-3 py-2 border" style="min-width: 180px;">Action</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -52,12 +56,21 @@
                             <td class="px-3 py-2 border">{{ $visitor->created_at }}</td>
                             <td class="px-3 py-2 border text-center">
                                 <span class="px-2 py-1 text-xs font-medium rounded-full 
-                                    @if($visitor->status === 'Accepted') bg-green-100 text-green-800
-                                    @elseif($visitor->status === 'Rejected') bg-red-100 text-red-800
-                                    @else bg-yellow-100 text-yellow-800
+                                    @if($visitor->status === 'Accepted') text-green-800
+                                    @elseif($visitor->status === 'Rejected') text-red-800
+                                    @else text-yellow-800 flex justify-center items-center
                                     @endif">
                                     {{ $visitor->status }}
                                 </span>
+                            </td>
+                            <td class="px-2 py-2 border text-center" style="min-width: 180px;">
+                                <div class="inline-block">
+                                    <button onclick="updateStatus({{ $visitor->id }}, 'Accepted', this)" class="bg-green-600 text-white px-2 py-1 rounded text-xs hover:bg-green-700 transition">Approve</button>
+                                    <button onclick="updateStatus({{ $visitor->id }}, 'Rejected', this)" class="bg-red-600 text-white px-2 py-1 rounded text-xs hover:bg-red-700 transition">Decline</button>
+                                </div>
+                                <div class="mt-2">
+                                    <a href="#" class="bg-blue-600 text-white px-2 py-1 rounded text-xs hover:bg-blue-700 transition">Edit</a>
+                                </div>
                             </td>
                         </tr>
                     @empty
@@ -69,5 +82,30 @@
             </table>
         </div>
     </div>
+    <script>
+function updateStatus(id, status, btn) {
+    fetch('/visitors/' + id + '/status', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRF-TOKEN': '{{ csrf_token() }}'
+        },
+        body: JSON.stringify({ status })
+    })
+    .then(res => res.json())
+    .then(data => {
+        if (data.success) {
+            // Update status text in the same row
+            const row = btn.closest('tr');
+            const statusCell = row.querySelector('span');
+            statusCell.textContent = status === 'Accepted' ? 'Accepted' : 'Rejected';
+            statusCell.className = 'px-2 py-1 text-xs font-medium rounded-full ' + (status === 'Accepted' ? 'text-green-800' : 'text-red-800');
+        } else {
+            alert('Failed to update status');
+        }
+    })
+    .catch(() => alert('Failed to update status'));
+}
+</script>
 </body>
 </html> 

@@ -28,3 +28,5 @@ Route::get('/visitors/{id}/approve', [VisitorController::class, 'approve'])->nam
 Route::get('/visitors/{id}/reject', [VisitorController::class, 'reject'])->name('visitors.reject');
 Route::view('/visitor-pledge', 'visitor-pledge')->name('visitor.pledge');
 Route::get('/visitor-list', [VisitorController::class, 'index'])->name('visitor.list');
+Route::get('/visitors/export', [VisitorController::class, 'export'])->name('visitors.export');
+Route::post('/visitors/{id}/status', [VisitorController::class, 'updateStatus'])->name('visitors.updateStatus');

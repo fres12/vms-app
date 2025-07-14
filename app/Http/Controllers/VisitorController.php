@@ -7,6 +7,10 @@ use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Mail;
 use App\Mail\VisitorNotification;
+use Maatwebsite\Excel\Facades\Excel;
+use App\Exports\VisitorExport;
+use Maatwebsite\Excel\Concerns\FromCollection;
+use Maatwebsite\Excel\Concerns\WithHeadings;
 
 class VisitorController extends Controller
 {
@@ -85,7 +89,7 @@ class VisitorController extends Controller
             ];
 
             try {
-                Mail::to('siregarfresnel@gmail.com')->send(new VisitorNotification($visitorData));
+                Mail::to('fresneld@hmmi.co.id')->send(new VisitorNotification($visitorData));
             } catch (\Exception $e) {
                 // Log error but don't stop the process
                 \Log::error('Failed to send email notification: ' . $e->getMessage());
@@ -181,5 +185,25 @@ class VisitorController extends Controller
                 'visitor' => null
             ]);
         }
+    }
+
+    public function export()
+    {
+        $visitors = DB::table('visitors')->orderByDesc('created_at')->get();
+        return Excel::download(new VisitorExport($visitors), 'visitors.xlsx');
+    }
+
+    public function updateStatus(Request $request, $id)
+    {
+        $request->validate([
+            'status' => 'required|in:Accepted,Rejected',
+        ]);
+
+        $updated = \DB::table('visitors')->where('id', $id)->update([
+            'status' => $request->status,
+            'updated_at' => now(),
+        ]);
+
+        return response()->json(['success' => $updated]);
     }
 }
