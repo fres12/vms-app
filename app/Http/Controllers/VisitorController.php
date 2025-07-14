@@ -206,4 +206,30 @@ class VisitorController extends Controller
 
         return response()->json(['success' => $updated]);
     }
+
+    public function showLogin()
+    {
+        return view('admin-login');
+    }
+
+    public function loginAdmin(Request $request)
+    {
+        $request->validate([
+            'email' => 'required|email',
+            'password' => 'required',
+        ]);
+
+        $user = \DB::table('accounts')
+            ->where('email', $request->email)
+            ->where('password', md5($request->password))
+            ->first();
+
+        if ($user) {
+            $request->session()->put('account_id', $user->id);
+            $request->session()->put('account_email', $user->email);
+            return redirect()->route('visitor.list');
+        } else {
+            return back()->with('error', 'Email atau password salah');
+        }
+    }
 }
