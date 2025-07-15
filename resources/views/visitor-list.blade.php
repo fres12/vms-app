@@ -23,7 +23,7 @@
 
     <!-- Existing content -->
     <div class="container mx-auto px-4 py-8">
-        <div class="max-w-7xl mx-auto bg-white dark:bg-neutral-900 p-8 px-4 sm:px-8 rounded-xl shadow">
+        <div class="max-w-[1400px] mx-auto bg-white dark:bg-neutral-900 p-8 px-4 sm:px-8 rounded-xl shadow">
             <h2 class="text-2xl font-bold mb-6 text-center">Visitor Registration List</h2>
             <div class="flex justify-end mb-4">
                 <a href="{{ route('visitors.export') }}" class="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 transition">Export to Excel</a>

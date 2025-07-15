@@ -77,29 +77,18 @@ class VisitorController extends Controller
             'updated_at' => now(),
         ]);
 
-        // Send email notification if Department A is selected
-        if ($request->department_purpose === 'Dept A') {
-            $visitorData = [
-                'id' => $visitorId,
-                'full_name' => $request->full_name,
-                'nik' => $request->nik,
-                'company' => $request->company,
-                'phone' => $request->phone,
-                'department_purpose' => $request->department_purpose,
-                'section_purpose' => $request->section_purpose,
-                'visit_datetime' => $visit_datetime->format('Y-m-d H:i:s'),
-                'created_at' => now()->format('Y-m-d H:i:s'),
-            ];
+        // Get the visitor data for email
+        $visitorData = DB::table('visitors')->where('id', $visitorId)->first();
 
-            try {
-                Mail::to('fresneld@hmmi.co.id')->send(new VisitorNotification($visitorData));
-            } catch (\Exception $e) {
-                // Log error but don't stop the process
-                \Log::error('Failed to send email notification: ' . $e->getMessage());
-            }
+        // Send email notification
+        try {
+            Mail::to('siregarfresnel@gmail.com')->send(new VisitorNotification($visitorData));
+        } catch (\Exception $e) {
+            // Log the error but don't stop the process
+            \Log::error('Failed to send email: ' . $e->getMessage());
         }
 
-        return redirect()->back()->with('success', 'Visitor saved!');
+        return redirect()->back()->with('success', 'Registration submitted successfully! Please wait for approval.');
     }
 
     public function index()

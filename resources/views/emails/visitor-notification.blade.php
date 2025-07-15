@@ -1,122 +1,48 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <meta charset="utf-8">
     <title>New Visitor Registration</title>
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            line-height: 1.6;
-            color: #333;
-            max-width: 600px;
-            margin: 0 auto;
-            padding: 20px;
-        }
-        .header {
-            background-color: #2563eb;
-            color: white;
-            padding: 20px;
-            text-align: center;
-            border-radius: 8px 8px 0 0;
-        }
-        .content {
-            background-color: #f8fafc;
-            padding: 20px;
-            border: 1px solid #e2e8f0;
-            border-radius: 0 0 8px 8px;
-        }
-        .visitor-info {
-            background-color: white;
-            padding: 15px;
-            border-radius: 5px;
-            margin: 15px 0;
-            border-left: 4px solid #2563eb;
-        }
-        .label {
-            font-weight: bold;
-            color: #374151;
-        }
-        .value {
-            color: #6b7280;
-            margin-bottom: 10px;
-        }
-        .footer {
-            text-align: center;
-            margin-top: 20px;
-            padding-top: 20px;
-            border-top: 1px solid #e2e8f0;
-            color: #6b7280;
-            font-size: 14px;
-        }
-    </style>
 </head>
-<body>
-    <div class="header">
-        <h1>New Visitor Registration</h1>
-        <p>Department A has received a new visitor registration</p>
-    </div>
-    
-    <div class="content">
-        <h2>Visitor Details:</h2>
+<body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
+    <div style="max-width: 600px; margin: 0 auto; padding: 20px;">
+        <h2 style="color: #2d3748;">New Visitor Registration</h2>
         
-        <div class="visitor-info">
-            <div class="label">Full Name:</div>
-            <div class="value">{{ $visitorData['full_name'] }}</div>
-            
-            <div class="label">NIK (National ID):</div>
-            <div class="value">{{ $visitorData['nik'] }}</div>
-            
-            <div class="label">Company:</div>
-            <div class="value">{{ $visitorData['company'] ?? 'Not provided' }}</div>
-            
-            <div class="label">Phone:</div>
-            <div class="value">{{ $visitorData['phone'] ?? 'Not provided' }}</div>
-            
-            <div class="label">Department Purpose:</div>
-            <div class="value">{{ $visitorData['department_purpose'] }}</div>
-            
-            <div class="label">Section Purpose:</div>
-            <div class="value">{{ $visitorData['section_purpose'] ?? 'Not provided' }}</div>
-            
-            <div class="label">Visit Date & Time:</div>
-            <div class="value">{{ $visitorData['visit_datetime'] }}</div>
-            
-            <div class="label">Registration Date:</div>
-            <div class="value">{{ $visitorData['created_at'] }}</div>
+        <p>A new visitor has registered with the following details:</p>
+        
+        <table style="width: 100%; border-collapse: collapse; margin-top: 20px;">
+            <tr>
+                <td style="padding: 8px; border-bottom: 1px solid #eee;"><strong>Full Name:</strong></td>
+                <td style="padding: 8px; border-bottom: 1px solid #eee;">{{ $visitor->full_name }}</td>
+            </tr>
+            <tr>
+                <td style="padding: 8px; border-bottom: 1px solid #eee;"><strong>Company:</strong></td>
+                <td style="padding: 8px; border-bottom: 1px solid #eee;">{{ $visitor->company }}</td>
+            </tr>
+            <tr>
+                <td style="padding: 8px; border-bottom: 1px solid #eee;"><strong>Department:</strong></td>
+                <td style="padding: 8px; border-bottom: 1px solid #eee;">{{ $visitor->department_purpose }}</td>
+            </tr>
+            <tr>
+                <td style="padding: 8px; border-bottom: 1px solid #eee;"><strong>Section:</strong></td>
+                <td style="padding: 8px; border-bottom: 1px solid #eee;">{{ $visitor->section_purpose }}</td>
+            </tr>
+            <tr>
+                <td style="padding: 8px; border-bottom: 1px solid #eee;"><strong>Visit Date:</strong></td>
+                <td style="padding: 8px; border-bottom: 1px solid #eee;">{{ \Carbon\Carbon::parse($visitor->visit_datetime)->format('d M Y') }}</td>
+            </tr>
+            <tr>
+                <td style="padding: 8px; border-bottom: 1px solid #eee;"><strong>Visit Time:</strong></td>
+                <td style="padding: 8px; border-bottom: 1px solid #eee;">{{ \Carbon\Carbon::parse($visitor->visit_datetime)->format('H:i') }}</td>
+            </tr>
+        </table>
+
+        <div style="margin-top: 30px;">
+            <p>Please review and approve/reject this registration.</p>
         </div>
-        
-        <p><strong>Note:</strong> This visitor has uploaded their ID card photo and self photo. Please review and take action below.</p>
-        
-        <div style="text-align: center; margin: 30px 0;">
-            <h3 style="color: #374151; margin-bottom: 20px;">Visitor Approval</h3>
-            <p style="color: #6b7280; margin-bottom: 20px;">Please review this visitor registration and take action:</p>
-            
-            <div style="display: inline-block; margin: 0 10px;">
-                <a href="{{ url('/visitors/' . $visitorData['id'] . '/approve') }}" 
-                   style="background-color: #10b981; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; display: inline-block; font-weight: bold;">
-                    ✅ Approve Visitor
-                </a>
-            </div>
-            
-            <div style="display: inline-block; margin: 0 10px;">
-                <a href="{{ url('/visitors/' . $visitorData['id'] . '/reject') }}" 
-                   style="background-color: #ef4444; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; display: inline-block; font-weight: bold;">
-                    ❌ Reject Visitor
-                </a>
-            </div>
+
+        <div style="margin-top: 40px; font-size: 12px; color: #666;">
+            <p>This is an automated message from the VMS App. Please do not reply to this email.</p>
         </div>
-        
-        <div style="background-color: #f3f4f6; padding: 15px; border-radius: 5px; margin-top: 20px;">
-            <p style="margin: 0; color: #6b7280; font-size: 14px;">
-                <strong>Security Note:</strong> These links are unique to this visitor registration. 
-                Once an action is taken, the status will be updated and the links will no longer work.
-            </p>
-        </div>
-    </div>
-    
-    <div class="footer">
-        <p>This is an automated notification from VMS App</p>
-        <p>Please do not reply to this email</p>
     </div>
 </body>
 </html> 
