@@ -11,6 +11,9 @@ use Maatwebsite\Excel\Facades\Excel;
 use App\Exports\VisitorExport;
 use Maatwebsite\Excel\Concerns\FromCollection;
 use Maatwebsite\Excel\Concerns\WithHeadings;
+use App\Models\Admin;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Hash;
 
 class VisitorController extends Controller
 {
@@ -219,17 +222,45 @@ class VisitorController extends Controller
             'password' => 'required',
         ]);
 
-        $user = \DB::table('accounts')
+        // First try with MD5 (legacy)
+        $admin = DB::table('accounts')
             ->where('email', $request->email)
             ->where('password', md5($request->password))
             ->first();
 
-        if ($user) {
-            $request->session()->put('account_id', $user->id);
-            $request->session()->put('account_email', $user->email);
-            return redirect()->route('visitor.list');
-        } else {
-            return back()->with('error', 'Email atau password salah');
+        if ($admin) {
+            // Update the password to Bcrypt
+            DB::table('accounts')
+                ->where('id', $admin->id)
+                ->update(['password' => Hash::make($request->password)]);
+
+            // Log the user in
+            Auth::guard('admin')->loginUsingId($admin->id);
+            $request->session()->regenerate();
+            
+            return redirect()->intended('/visitor-list');
         }
+
+        // If MD5 fails, try with Bcrypt (for already upgraded passwords)
+        if (Auth::guard('admin')->attempt([
+            'email' => $request->email,
+            'password' => $request->password
+        ])) {
+            $request->session()->regenerate();
+            return redirect()->intended('/visitor-list');
+        }
+
+        return back()->withErrors([
+            'email' => 'Email atau password salah',
+        ])->onlyInput('email');
+    }
+
+    public function logout(Request $request)
+    {
+        Auth::guard('admin')->logout();
+        $request->session()->invalidate();
+        $request->session()->regenerateToken();
+        
+        return redirect()->route('login');
     }
 }

@@ -29,6 +29,7 @@ Route::middleware(['auth'])->group(function () {
 // Route login TIDAK dalam group middleware
 Route::get('/login', [VisitorController::class, 'showLogin'])->name('login');
 Route::post('/login', [VisitorController::class, 'loginAdmin'])->name('login.submit');
+Route::post('/logout', [VisitorController::class, 'logout'])->name('logout');
 
 // Route publik
 Route::view('/visitor-form', 'visitor-form')->name('visitor.form');
