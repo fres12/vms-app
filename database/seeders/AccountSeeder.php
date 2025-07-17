@@ -13,10 +13,17 @@ class AccountSeeder extends Seeder
     public function run(): void
     {
         DB::table('accounts')->insert([
-            'email' => 'admin@hmmi.co.id',
-            'password' => md5('Hmmi12345!'),
-            'created_at' => now(),
-            'updated_at' => now(),
+            [
+                'id' => 1,
+                'email' => 'admin@hmmi.co.id',
+                'password' => md5('Hmmi12345!'),
+                'no_employee' => '0000000000',
+                'name' => 'Admin Master',
+                'position' => 'Administrator',
+                'deptID' => 1, // master dept (changed from 0 to 1)
+                'created_at' => now(),
+                'updated_at' => now(),
+            ],
         ]);
     }
 } 

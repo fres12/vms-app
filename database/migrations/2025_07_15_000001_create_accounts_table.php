@@ -12,11 +12,22 @@ return new class extends Migration
     public function up(): void
     {
         Schema::create('accounts', function (Blueprint $table) {
-            $table->id();
+            $table->bigIncrements('id');
             $table->string('email')->unique();
-            $table->string('password'); 
+            $table->string('password');
+            $table->string('no_employee', 100);
+            $table->string('name', 255);
+            $table->string('position', 255)->nullable();
+            $table->unsignedBigInteger('deptID');
             $table->timestamps();
+
+            $table->foreign('deptID')->references('deptID')->on('depts')->onDelete('cascade');
         });
+
+        // Drop picdepts table if exists
+        if (Schema::hasTable('picdepts')) {
+            Schema::drop('picdepts');
+        }
     }
 
     /**
@@ -26,4 +37,4 @@ return new class extends Migration
     {
         Schema::dropIfExists('accounts');
     }
-};
+}; 
