@@ -35,7 +35,6 @@ Route::post('/logout', [VisitorController::class, 'logout'])->name('logout');
 Route::view('/visitor-form', 'visitor-form')->name('visitor.form');
 Route::post('/visitors', [VisitorController::class, 'store'])->name('visitors.store');
 Route::get('/visitors', [VisitorController::class, 'index'])->name('visitors.index');
-Route::view('/visitor-pledge', 'visitor-pledge')->name('visitor.pledge');
 
 // Route yang butuh login admin
 Route::middleware(['admin.auth'])->group(function () {

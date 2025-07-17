@@ -85,9 +85,6 @@
                                         <button onclick="updateStatus({{ $visitor->id }}, 'Accepted', this)" class="bg-green-600 text-white px-2 py-1 rounded text-xs hover:bg-green-700 transition">Approve</button>
                                         <button onclick="updateStatus({{ $visitor->id }}, 'Rejected', this)" class="bg-red-600 text-white px-2 py-1 rounded text-xs hover:bg-red-700 transition">Decline</button>
                                     </div>
-                                    <div class="mt-2">
-                                        <a href="#" class="bg-blue-600 text-white px-2 py-1 rounded text-xs hover:bg-blue-700 transition">Edit</a>
-                                    </div>
                                 </td>
                             </tr>
                         @empty
