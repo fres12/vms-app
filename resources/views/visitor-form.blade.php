@@ -98,7 +98,7 @@
         </div>
     </div>
     <div class="flex items-center justify-center">
-        <div class="w-full max-w-md sm:max-w-lg md:max-w-2xl lg:max-w-3xl xl:max-w-4xl bg-white dark:bg-neutral-900 p-4 sm:p-8 shadow-xl rounded-xl mt-4 sm:mt-6 md:mt-8 z-10 relative">
+        <div class="w-full max-w-md sm:max-w-lg md:max-w-4xl lg:max-w-6xl xl:max-w-8xl bg-white dark:bg-neutral-900 p-4 sm:p-8 shadow-xl rounded-xl mt-4 sm:mt-6 md:mt-8 z-10 mb-6 relative">
             <h2 class="text-lg sm:text-xl md:text-2xl lg:text-[23px] font-bold text-[#003368] mb-4">Visitor Registration Form</h2>
             
             @if(session('success'))
