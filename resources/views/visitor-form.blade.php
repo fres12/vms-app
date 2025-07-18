@@ -311,18 +311,20 @@
                 </div>
                 <div class="relative mb-4">
                     <select
-                        name="department_purpose"
-                        id="department_purpose"
-                        class="peer w-full border rounded px-3 py-4 pt-6 text-base bg-transparent placeholder-transparent focus:border-black focus:ring-0 @error('department_purpose') border-red-500 @enderror"
+                        name="deptpurpose"
+                        id="deptpurpose"
+                        class="peer w-full border rounded px-3 py-4 pt-6 text-base bg-transparent placeholder-transparent focus:border-black focus:ring-0 @error('deptpurpose') border-red-500 @enderror"
                         required
                     >
                         <option value="">Select Department</option>
-                        <option value="Dept A" {{ old('department_purpose') == 'Dept A' ? 'selected' : '' }}>Dept A</option>
-                        <option value="Dept B" {{ old('department_purpose') == 'Dept B' ? 'selected' : '' }}>Dept B</option>
-                        <option value="Dept C" {{ old('department_purpose') == 'Dept C' ? 'selected' : '' }}>Dept C</option>
+                        @foreach($depts as $dept)
+                            <option value="{{ $dept->deptID }}" {{ old('deptpurpose') == $dept->deptID ? 'selected' : '' }}>
+                                {{ $dept->nameDept }}
+                            </option>
+                        @endforeach
                     </select>
                     <label
-                        for="department_purpose"
+                        for="deptpurpose"
                         class="absolute left-3 top-1/2 -translate-y-1/2 text-lg text-gray-500 bg-white px-1 transition-all duration-200 pointer-events-none
                             peer-placeholder-shown:top-1/2
                             peer-placeholder-shown:text-lg
@@ -338,52 +340,23 @@
                     >
                         Department Purpose
                     </label>
-                    @error('department_purpose')
+                    @error('deptpurpose')
                         <span class="text-red-600 text-xs">{{ $message }}</span>
                     @enderror
                 </div>
+
                 <div class="relative mb-4">
                     <input
                         type="text"
-                        name="section_purpose"
-                        id="section_purpose"
-                        value="{{ old('section_purpose') }}"
-                        class="peer w-full border rounded px-3 py-4 pt-6 text-base bg-transparent placeholder-transparent focus:border-black focus:ring-0 @error('section_purpose') border-red-500 @enderror"
-                        placeholder="Section Purpose"
-                    >
-                    <label
-                        for="section_purpose"
-                        class="absolute left-3 top-1/2 -translate-y-1/2 text-lg text-gray-500 bg-white px-1 transition-all duration-200 pointer-events-none
-                            peer-placeholder-shown:top-1/2
-                            peer-placeholder-shown:text-lg
-                            peer-placeholder-shown:text-gray-500
-                            peer-focus:top-2
-                            peer-focus:text-sm
-                            peer-focus:text-black
-                            peer-focus:bg-white
-                            peer-not-placeholder-shown:top-2
-                            peer-not-placeholder-shown:text-sm
-                            peer-not-placeholder-shown:text-black
-                            peer-not-placeholder-shown:bg-white"
-                    >
-                        Section Purpose
-                    </label>
-                    @error('section_purpose')
-                        <span class="text-red-600 text-xs">{{ $message }}</span>
-                    @enderror
-                </div>
-                <div class="relative mb-4">
-                    <input
-                        type="date"
-                        name="visit_date"
-                        id="visit_date"
-                        value="{{ old('visit_date') }}"
-                        class="peer w-full border rounded px-3 py-4 pt-6 text-base bg-transparent placeholder-transparent focus:border-black focus:ring-0 @error('visit_date') border-red-500 @enderror"
-                        placeholder="Visit Date"
+                        name="visit_purpose"
+                        id="visit_purpose"
+                        value="{{ old('visit_purpose') }}"
+                        class="peer w-full border rounded px-3 py-4 pt-6 text-base bg-transparent placeholder-transparent focus:border-black focus:ring-0 @error('visit_purpose') border-red-500 @enderror"
+                        placeholder="Visit Purpose"
                         required
                     >
                     <label
-                        for="visit_date"
+                        for="visit_purpose"
                         class="absolute left-3 top-1/2 -translate-y-1/2 text-lg text-gray-500 bg-white px-1 transition-all duration-200 pointer-events-none
                             peer-placeholder-shown:top-1/2
                             peer-placeholder-shown:text-lg
@@ -397,24 +370,24 @@
                             peer-not-placeholder-shown:text-black
                             peer-not-placeholder-shown:bg-white"
                     >
-                        Visit Date
+                        Visit Purpose
                     </label>
-                    @error('visit_date')
+                    @error('visit_purpose')
                         <span class="text-red-600 text-xs">{{ $message }}</span>
                     @enderror
                 </div>
+
                 <div class="relative mb-4">
                     <input
-                        type="time"
-                        name="visit_time"
-                        id="visit_time"
-                        value="{{ old('visit_time') }}"
-                        class="peer w-full border rounded px-3 py-4 pt-6 text-base bg-transparent placeholder-transparent focus:border-black focus:ring-0 @error('visit_time') border-red-500 @enderror"
-                        placeholder="Visit Time"
+                        type="datetime-local"
+                        name="startdate"
+                        id="startdate"
+                        value="{{ old('startdate') }}"
+                        class="peer w-full border rounded px-3 py-4 pt-6 text-base bg-transparent placeholder-transparent focus:border-black focus:ring-0 @error('startdate') border-red-500 @enderror"
                         required
                     >
                     <label
-                        for="visit_time"
+                        for="startdate"
                         class="absolute left-3 top-1/2 -translate-y-1/2 text-lg text-gray-500 bg-white px-1 transition-all duration-200 pointer-events-none
                             peer-placeholder-shown:top-1/2
                             peer-placeholder-shown:text-lg
@@ -428,12 +401,110 @@
                             peer-not-placeholder-shown:text-black
                             peer-not-placeholder-shown:bg-white"
                     >
-                        Visit Time
+                        Start Date & Time
                     </label>
-                    @error('visit_time')
+                    @error('startdate')
                         <span class="text-red-600 text-xs">{{ $message }}</span>
                     @enderror
                 </div>
+
+                <div class="relative mb-4">
+                    <input
+                        type="datetime-local"
+                        name="enddate"
+                        id="enddate"
+                        value="{{ old('enddate') }}"
+                        class="peer w-full border rounded px-3 py-4 pt-6 text-base bg-transparent placeholder-transparent focus:border-black focus:ring-0 @error('enddate') border-red-500 @enderror"
+                        required
+                    >
+                    <label
+                        for="enddate"
+                        class="absolute left-3 top-1/2 -translate-y-1/2 text-lg text-gray-500 bg-white px-1 transition-all duration-200 pointer-events-none
+                            peer-placeholder-shown:top-1/2
+                            peer-placeholder-shown:text-lg
+                            peer-placeholder-shown:text-gray-500
+                            peer-focus:top-2
+                            peer-focus:text-sm
+                            peer-focus:text-black
+                            peer-focus:bg-white
+                            peer-not-placeholder-shown:top-2
+                            peer-not-placeholder-shown:text-sm
+                            peer-not-placeholder-shown:text-black
+                            peer-not-placeholder-shown:bg-white"
+                    >
+                        End Date & Time
+                    </label>
+                    @error('enddate')
+                        <span class="text-red-600 text-xs">{{ $message }}</span>
+                    @enderror
+                </div>
+
+                <div class="mb-6">
+                    <h3 class="text-lg font-medium text-gray-900 mb-2">Additional Requirements</h3>
+                    <p class="text-gray-600 mb-4">Please fill this if you have additional requirement</p>
+                    
+                    <div class="relative mb-4">
+                        <input
+                            type="text"
+                            name="equipment_type"
+                            id="equipment_type"
+                            value="{{ old('equipment_type') }}"
+                            class="peer w-full border rounded px-3 py-4 pt-6 text-base bg-transparent placeholder-transparent focus:border-black focus:ring-0 @error('equipment_type') border-red-500 @enderror"
+                            placeholder="Equipment Type"
+                        >
+                        <label
+                            for="equipment_type"
+                            class="absolute left-3 top-1/2 -translate-y-1/2 text-lg text-gray-500 bg-white px-1 transition-all duration-200 pointer-events-none
+                                peer-placeholder-shown:top-1/2
+                                peer-placeholder-shown:text-lg
+                                peer-placeholder-shown:text-gray-500
+                                peer-focus:top-2
+                                peer-focus:text-sm
+                                peer-focus:text-black
+                                peer-focus:bg-white
+                                peer-not-placeholder-shown:top-2
+                                peer-not-placeholder-shown:text-sm
+                                peer-not-placeholder-shown:text-black
+                                peer-not-placeholder-shown:bg-white"
+                        >
+                            Equipment Type
+                        </label>
+                    </div>
+
+                    <div class="relative mb-4">
+                        <input
+                            type="text"
+                            name="brand"
+                            id="brand"
+                            value="{{ old('brand') }}"
+                            class="peer w-full border rounded px-3 py-4 pt-6 text-base bg-transparent placeholder-transparent focus:border-black focus:ring-0 @error('brand') border-red-500 @enderror"
+                            placeholder="Brand"
+                        >
+                        <label
+                            for="brand"
+                            class="absolute left-3 top-1/2 -translate-y-1/2 text-lg text-gray-500 bg-white px-1 transition-all duration-200 pointer-events-none
+                                peer-placeholder-shown:top-1/2
+                                peer-placeholder-shown:text-lg
+                                peer-placeholder-shown:text-gray-500
+                                peer-focus:top-2
+                                peer-focus:text-sm
+                                peer-focus:text-black
+                                peer-focus:bg-white
+                                peer-not-placeholder-shown:top-2
+                                peer-not-placeholder-shown:text-sm
+                                peer-not-placeholder-shown:text-black
+                                peer-not-placeholder-shown:bg-white"
+                        >
+                            Brand
+                        </label>
+                    </div>
+                </div>
+
+                <!-- Hidden fields for status and submit date -->
+                <input type="hidden" name="status" value="For Review">
+                <input type="hidden" name="submit_date" value="{{ now() }}">
+                <input type="hidden" name="approved_date" value="">
+                
                 <div class="mb-4">
                     <label class="inline-flex items-center font-normal">
                         <input type="checkbox" id="pledgeCheckbox" name="pledge_agreement" required class="form-checkbox mr-2 accent-[#003368]">
@@ -529,34 +600,46 @@
 
         // Date and time validation
         document.addEventListener('DOMContentLoaded', function() {
-            const visitDateInput = document.querySelector('input[name="visit_date"]');
-            const visitTimeInput = document.querySelector('input[name="visit_time"]');
+            const startDateInput = document.querySelector('input[name="startdate"]');
+            const endDateInput = document.querySelector('input[name="enddate"]');
             
             // Set minimum date to today
-            const today = new Date().toISOString().split('T')[0];
-            visitDateInput.setAttribute('min', today);
+            const today = new Date().toISOString().slice(0, 16); // YYYY-MM-DDTHH:MM
+            startDateInput.setAttribute('min', today);
+            endDateInput.setAttribute('min', today);
             
             // Validate date and time combination
             function validateDateTime() {
-                const selectedDate = visitDateInput.value;
-                const selectedTime = visitTimeInput.value;
+                const selectedStartDate = startDateInput.value;
+                const selectedEndDate = endDateInput.value;
                 
-                if (selectedDate && selectedTime) {
-                    const selectedDateTime = new Date(selectedDate + 'T' + selectedTime);
+                if (selectedStartDate && selectedEndDate) {
+                    const selectedStartDateTime = new Date(selectedStartDate);
+                    const selectedEndDateTime = new Date(selectedEndDate);
                     const now = new Date();
                     
-                    if (selectedDateTime <= now) {
-                        visitDateInput.setCustomValidity('Visit date and time must be in the future');
-                        visitTimeInput.setCustomValidity('Visit date and time must be in the future');
+                    if (selectedStartDateTime <= now) {
+                        startDateInput.setCustomValidity('Start date and time must be in the future');
                     } else {
-                        visitDateInput.setCustomValidity('');
-                        visitTimeInput.setCustomValidity('');
+                        startDateInput.setCustomValidity('');
+                    }
+
+                    if (selectedEndDateTime <= now) {
+                        endDateInput.setCustomValidity('End date and time must be in the future');
+                    } else {
+                        endDateInput.setCustomValidity('');
+                    }
+
+                    if (selectedEndDateTime <= selectedStartDateTime) {
+                        endDateInput.setCustomValidity('End date and time must be after start date and time');
+                    } else {
+                        endDateInput.setCustomValidity('');
                     }
                 }
             }
             
-            visitDateInput.addEventListener('change', validateDateTime);
-            visitTimeInput.addEventListener('change', validateDateTime);
+            startDateInput.addEventListener('change', validateDateTime);
+            endDateInput.addEventListener('change', validateDateTime);
         });
 
         // Updated Modal functionality
