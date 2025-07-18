@@ -85,10 +85,7 @@
                                 <td class="px-8 py-2 border text-center">{{ \Carbon\Carbon::parse($visitor->submit_date)->format('d-m-Y H:i') }}</td>
                                 <td class="px-12 py-2 border text-center">
                                     <span class="text-center
-                                        @if($visitor->status === 'Accepted') text-green-800
-                                        @elseif($visitor->status === 'Rejected') text-red-800
-                                        @elseif($visitor->status === 'For Review') text-green-600
-                                        @else text-gray-800
+                                        @if($visitor->status === 'For Review') text-blue-600
                                         @endif">
                                         {{ $visitor->status }}
                                     </span>
@@ -101,12 +98,10 @@
                                     @endif
                                 </td>
                                 <td class="px-3 py-2 border text-center">
-                                    @if($visitor->status === 'For Review')
-                                        <div class="inline-block">
-                                            <button onclick="updateStatus({{ $visitor->id }}, 'Accepted', this)" class="bg-green-600 text-white px-2 py-1 rounded text-xs hover:bg-green-700 transition">Approve</button>
-                                            <button onclick="updateStatus({{ $visitor->id }}, 'Rejected', this)" class="bg-red-600 text-white px-2 py-1 rounded text-xs hover:bg-red-700 transition">Decline</button>
-                                        </div>
-                                    @endif
+                                    <div class="inline-block">
+                                        <button onclick="updateStatus({{ $visitor->id }}, 'Accepted', this)" class="bg-green-600 text-white px-2 py-1 rounded text-xs hover:bg-green-700 transition">Approve</button>
+                                        <button onclick="updateStatus({{ $visitor->id }}, 'Rejected', this)" class="bg-red-600 text-white px-2 py-1 rounded text-xs hover:bg-red-700 transition">Decline</button>
+                                    </div>
                                 </td>
                             </tr>
                         @empty
@@ -120,29 +115,41 @@
         </div>
     </div>
     <script>
-function updateStatus(id, status, btn) {
-    fetch('/visitors/' + id + '/status', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'X-CSRF-TOKEN': '{{ csrf_token() }}'
-        },
-        body: JSON.stringify({ status })
-    })
-    .then(res => res.json())
-    .then(data => {
-        if (data.success) {
-            // Update status text in the same row
-            const row = btn.closest('tr');
-            const statusCell = row.querySelector('span');
-            statusCell.textContent = status === 'Accepted' ? 'Accepted' : 'Rejected';
-            statusCell.className = 'px-2 py-1 text-xs font-medium rounded-full ' + (status === 'Accepted' ? 'text-green-800' : 'text-red-800');
-        } else {
-            alert('Failed to update status');
+        function updateStatus(id, status, btn) {
+            fetch('/visitors/' + id + '/status', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': '{{ csrf_token() }}'
+                },
+                body: JSON.stringify({ status })
+            })
+            .then(res => res.json())
+            .then(data => {
+                console.log('Response:', data);
+                
+                if (data.success) {
+                    // Update status text in the same row
+                    const row = btn.closest('tr');
+                    const statusCell = row.querySelector('span');
+                    statusCell.textContent = data.status;
+                    if (data.status === 'Approved (2/2)') {
+                        statusCell.className = 'text-center';
+                    } else if (data.status === 'Declined') {
+                        statusCell.className = 'text-center';
+                    } else {
+                        statusCell.className = 'text-center';
+                    }
+                    // Don't hide action buttons anymore
+                } else {
+                    alert(data.message || 'Failed to update status');
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('Error updating status: ' + error.message);
+            });
         }
-    })
-    .catch(() => alert('Failed to update status'));
-}
-</script>
+    </script>
 </body>
 </html> 

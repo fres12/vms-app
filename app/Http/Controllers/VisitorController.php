@@ -200,16 +200,68 @@ class VisitorController extends Controller
 
     public function updateStatus(Request $request, $id)
     {
-        $request->validate([
-            'status' => 'required|in:Accepted,Rejected',
-        ]);
+        try {
+            $request->validate([
+                'status' => 'required|in:Accepted,Rejected',
+            ]);
 
-        $updated = \DB::table('visitors')->where('id', $id)->update([
-            'status' => $request->status,
-            'updated_at' => now(),
-        ]);
+            // Check if visitor exists
+            $visitor = DB::table('visitors')->where('id', $id)->first();
+            if (!$visitor) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Visitor not found'
+                ]);
+            }
 
-        return response()->json(['success' => $updated]);
+            // Get current admin's deptID
+            $admin = auth()->guard('admin')->user();
+            if (!$admin) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Admin not authenticated'
+                ]);
+            }
+
+            if ($request->status === 'Accepted') {
+                if ($admin->deptID != 1) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Only master admin can approve visitors'
+                    ]);
+                }
+                $newStatus = 'Approved (2/2)';
+            } else {
+                $newStatus = 'Declined';
+            }
+
+            $updated = DB::table('visitors')
+                ->where('id', $id)
+                ->update([
+                    'status' => $newStatus,
+                    'approved_date' => $request->status === 'Accepted' ? now() : null
+                ]);
+
+            if (!$updated) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Failed to update visitor status'
+                ]);
+            }
+
+            return response()->json([
+                'success' => true,
+                'status' => $newStatus,
+                'message' => 'Status updated successfully'
+            ]);
+
+        } catch (\Exception $e) {
+            \Log::error('Error updating visitor status: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'An error occurred while updating status'
+            ]);
+        }
     }
 
     public function showLogin()
