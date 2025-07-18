@@ -20,75 +20,84 @@ class VisitorController extends Controller
     public function store(Request $request)
     {
         $request->validate([
-            'nik' => 'required|string',
-            'id_card_photo' => 'required|image|mimes:jpg,jpeg,png|max:2048',
-            'self_photo' => 'required|image|mimes:jpg,jpeg,png|max:2048',
             'full_name' => 'required|string',
+            'email' => 'required|email',
+            'nik' => 'required|string',
+            'id_card_photo' => 'required|image|mimes:jpeg,png,jpg|max:2048',
+            'self_photo' => 'required|image|mimes:jpeg,png,jpg|max:2048',
             'company' => 'nullable|string',
             'phone' => 'nullable|string',
-            'department_purpose' => 'nullable|string',
-            'section_purpose' => 'nullable|string',
-            'visit_date' => 'required|date_format:Y-m-d',
-            'visit_time' => 'required|date_format:H:i',
+            'deptpurpose' => 'required|exists:depts,deptID',
+            'visit_purpose' => 'required|string',
+            'startdate' => 'required|date',
+            'enddate' => 'required|date|after:startdate',
+            'equipment_type' => 'nullable|string',
+            'brand' => 'nullable|string',
+            'pledge_agreement' => 'required|accepted'
         ]);
 
-        // Upload ID Card Photo
-        if ($request->hasFile('id_card_photo')) {
-            $idCardPhotoName = uniqid('idcard_') . '.' . $request->file('id_card_photo')->getClientOriginalExtension();
-            $request->file('id_card_photo')->move(public_path('storage/idcard_photo'), $idCardPhotoName);
-            $idCardPhotoPath = 'idcard_photo/' . $idCardPhotoName;
-        }
-
-        // Upload Self Photo
-        if ($request->hasFile('self_photo')) {
-            $selfPhotoName = uniqid('self_') . '.' . $request->file('self_photo')->getClientOriginalExtension();
-            $request->file('self_photo')->move(public_path('storage/self_photo'), $selfPhotoName);
-            $selfPhotoPath = 'self_photo/' . $selfPhotoName;
-        }
-
-        // Validate and parse visit datetime with better error handling
         try {
-            $visit_datetime = Carbon::createFromFormat('Y-m-d H:i', $request->visit_date . ' ' . $request->visit_time);
+            // Handle ID Card Photo Upload
+            $idCardPhotoPath = $request->file('id_card_photo')->store('id_cards', 'public');
             
-            // Additional validation to ensure date is not in the past
-            if ($visit_datetime->isPast()) {
-                return redirect()->back()
-                    ->withErrors(['visit_date' => 'Visit date and time cannot be in the past'])
-                    ->withInput();
+            // Handle Self Photo Upload
+            $selfPhotoPath = $request->file('self_photo')->store('self_photos', 'public');
+
+            // Insert into database
+            DB::table('visitors')->insert([
+                'fullname' => $request->full_name,
+                'email' => $request->email,
+                'nik' => $request->nik,
+                'idcardphoto' => $idCardPhotoPath,
+                'selfphoto' => $selfPhotoPath,
+                'company' => $request->company,
+                'phone' => $request->phone,
+                'deptpurpose' => $request->deptpurpose,
+                'visit_purpose' => $request->visit_purpose,
+                'startdate' => $request->startdate,
+                'enddate' => $request->enddate,
+                'equipment_type' => $request->equipment_type,
+                'brand' => $request->brand,
+                'status' => 'For Review',
+                'submit_date' => now(),
+                'approved_date' => null
+            ]);
+
+            // Send email notification to admin
+            try {
+                // Get the admin email from the accounts table where deptID = 1 (master)
+                $adminEmail = DB::table('accounts')
+                    ->where('deptID', 1)
+                    ->value('email');
+
+                if ($adminEmail) {
+                    // Get department name for email
+                    $deptName = DB::table('depts')
+                        ->where('deptID', $request->deptpurpose)
+                        ->value('nameDept');
+
+                    Mail::to($adminEmail)->send(new VisitorNotification([
+                        'name' => $request->full_name,
+                        'company' => $request->company,
+                        'visit_purpose' => $request->visit_purpose,
+                        'startdate' => $request->startdate,
+                        'enddate' => $request->enddate,
+                        'department' => $deptName
+                    ]));
+                }
+            } catch (\Exception $e) {
+                \Log::error('Failed to send email notification: ' . $e->getMessage());
+                // Continue execution even if email fails
             }
+
+            return redirect()->back()->with('success', 'Your visitor registration has been submitted successfully. Please wait for approval.');
+
         } catch (\Exception $e) {
+            \Log::error('Error in visitor registration: ' . $e->getMessage());
             return redirect()->back()
-                ->withErrors(['visit_date' => 'Invalid visit date or time format'])
-                ->withInput();
+                ->withInput()
+                ->withErrors(['error' => 'An error occurred while processing your registration. Please try again.']);
         }
-
-        $visitorId = DB::table('visitors')->insertGetId([
-            'nik' => $request->nik,
-            'id_card_photo' => $idCardPhotoPath ?? null,
-            'full_name' => $request->full_name,
-            'company' => $request->company,
-            'phone' => $request->phone,
-            'department_purpose' => $request->department_purpose,
-            'section_purpose' => $request->section_purpose,
-            'self_photo' => $selfPhotoPath ?? null,
-            'visit_datetime' => $visit_datetime,
-            'status' => 'For review',
-            'created_at' => now(),
-            'updated_at' => now(),
-        ]);
-
-        // Get the visitor data for email
-        $visitorData = DB::table('visitors')->where('id', $visitorId)->first();
-
-        // Send email notification
-        try {
-            Mail::to('siregarfresnel@gmail.com')->send(new VisitorNotification($visitorData));
-        } catch (\Exception $e) {
-            // Log the error but don't stop the process
-            \Log::error('Failed to send email: ' . $e->getMessage());
-        }
-
-        return redirect()->back()->with('success', 'Registration submitted successfully! Please wait for approval.');
     }
 
     public function index()

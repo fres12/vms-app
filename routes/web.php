@@ -4,6 +4,7 @@ use Illuminate\Support\Facades\Route;
 use Livewire\Volt\Volt;
 use App\Http\Livewire\VisitorForm;
 use App\Http\Controllers\VisitorController;
+use App\Http\Controllers\VisitorFormController;
 
 Route::get('/', function () {
     return view('welcome');
@@ -19,22 +20,16 @@ Route::middleware(['auth'])->group(function () {
     Volt::route('settings/profile', 'settings.profile')->name('settings.profile');
     Volt::route('settings/password', 'settings.password')->name('settings.password');
     Volt::route('settings/appearance', 'settings.appearance')->name('settings.appearance');
-    Route::get('/visitors/{id}/approve', [VisitorController::class, 'approve'])->name('visitors.approve');
-    Route::get('/visitors/{id}/reject', [VisitorController::class, 'reject'])->name('visitors.reject');
-    Route::get('/visitor-list', [VisitorController::class, 'index'])->name('visitor.list');
-    Route::get('/visitors/export', [VisitorController::class, 'export'])->name('visitors.export');
-    Route::post('/visitors/{id}/status', [VisitorController::class, 'updateStatus'])->name('visitors.updateStatus');
 });
 
-// Route login TIDAK dalam group middleware
+// Route login
 Route::get('/login', [VisitorController::class, 'showLogin'])->name('login');
 Route::post('/login', [VisitorController::class, 'loginAdmin'])->name('login.submit');
 Route::post('/logout', [VisitorController::class, 'logout'])->name('logout');
 
-// Route publik
-Route::view('/visitor-form', 'visitor-form')->name('visitor.form');
-Route::post('/visitors', [VisitorController::class, 'store'])->name('visitors.store');
-Route::get('/visitors', [VisitorController::class, 'index'])->name('visitors.index');
+// Route publik untuk form visitor
+Route::get('/visitor-form', [VisitorFormController::class, 'create'])->name('visitor.form');
+Route::post('/visitor-form', [VisitorController::class, 'store'])->name('visitor.store');
 
 // Route yang butuh login admin
 Route::middleware(['admin.auth'])->group(function () {

@@ -117,7 +117,7 @@
                 </div>
             @endif
 
-            <form action="{{ route('visitors.store') }}" method="POST" enctype="multipart/form-data">
+            <form action="{{ route('visitor.store') }}" method="POST" enctype="multipart/form-data">
                 @csrf
                 <div class="relative mb-4">
                     <input
@@ -147,6 +147,38 @@
                         Full Name
                     </label>
                     @error('full_name')
+                        <span class="text-red-600 text-xs">{{ $message }}</span>
+                    @enderror
+                </div>
+
+                <div class="relative mb-4">
+                    <input
+                        type="email"
+                        name="email"
+                        id="email"
+                        value="{{ old('email') }}"
+                        class="peer w-full border rounded px-3 py-4 pt-6 text-base bg-transparent placeholder-transparent focus:border-black focus:ring-0 @error('email') border-red-500 @enderror"
+                        placeholder="Email"
+                        required
+                    >
+                    <label
+                        for="email"
+                        class="absolute left-3 top-1/2 -translate-y-1/2 text-lg text-gray-500 bg-white px-1 transition-all duration-200 pointer-events-none
+                            peer-placeholder-shown:top-1/2
+                            peer-placeholder-shown:text-lg
+                            peer-placeholder-shown:text-gray-500
+                            peer-focus:top-2
+                            peer-focus:text-sm
+                            peer-focus:text-black
+                            peer-focus:bg-white
+                            peer-not-placeholder-shown:top-2
+                            peer-not-placeholder-shown:text-sm
+                            peer-not-placeholder-shown:text-black
+                            peer-not-placeholder-shown:bg-white"
+                    >
+                        Email
+                    </label>
+                    @error('email')
                         <span class="text-red-600 text-xs">{{ $message }}</span>
                     @enderror
                 </div>
@@ -318,9 +350,11 @@
                     >
                         <option value="">Select Department</option>
                         @foreach($depts as $dept)
-                            <option value="{{ $dept->deptID }}" {{ old('deptpurpose') == $dept->deptID ? 'selected' : '' }}>
-                                {{ $dept->nameDept }}
-                            </option>
+                            @if($dept->deptID != 1)
+                                <option value="{{ $dept->deptID }}" {{ old('deptpurpose') == $dept->deptID ? 'selected' : '' }}>
+                                    {{ $dept->nameDept }}
+                                </option>
+                            @endif
                         @endforeach
                     </select>
                     <label
@@ -441,7 +475,7 @@
 
                 <div class="mb-6">
                     <h3 class="text-lg font-medium text-gray-900 mb-2">Additional Requirements</h3>
-                    <p class="text-gray-600 mb-4">Please fill this if you have additional requirement</p>
+                    <p class="text-gray-600 mb-4">Please specify if you are bringing additional items (such as electronics) or have any special requirements</p>
                     
                     <div class="relative mb-4">
                         <input
