@@ -22,74 +22,96 @@
     </div>
 
     <!-- Existing content -->
-    <div class="container mx-auto px-4 py-8">
-        <div class="max-w-[1400px] mx-auto bg-white dark:bg-neutral-900 p-8 px-4 sm:px-8 rounded-xl shadow">
+    <div class="container-fluid px-4 py-8">
+        <div class="bg-white dark:bg-neutral-900 p-8 px-4 sm:px-8 rounded-xl shadow">
             <h2 class="text-2xl font-bold mb-6 text-center">Visitor Registration List</h2>
             <div class="flex justify-end mb-4">
                 <a href="{{ route('visitors.export') }}" class="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 transition">Export to Excel</a>
             </div>
             <div class="overflow-x-auto">
-                <table class="min-w-[1200px] w-full border text-sm">
+                <table class="w-full border-collapse border text-sm">
                     <thead>
                         <tr class="bg-gray-200 dark:bg-neutral-800">
                             <th class="px-3 py-2 border">No</th>
-                            <th class="px-3 py-2 border">Full Name</th>
-                            <th class="px-3 py-2 border">NIK</th>
-                            <th class="px-3 py-2 border">Company</th>
-                            <th class="px-3 py-2 border">Phone</th>
-                            <th class="px-3 py-2 border">Department Purpose</th>
-                            <th class="px-3 py-2 border">Section Purpose</th>
-                            <th class="px-3 py-2 border">Visit Date</th>
-                            <th class="px-3 py-2 border">Visit Time</th>
-                            <th class="px-3 py-2 border">ID Card Photo</th>
-                            <th class="px-3 py-2 border">Self Photo</th>
-                            <th class="px-3 py-2 border">Created At</th>
-                            <th class="px-3 py-2 border">Status</th>
-                            <th class="px-3 py-2 border" style="min-width: 180px;">Action</th>
+                            <th class="px-4 py-2 border">Full Name</th>
+                            <th class="px-6 py-2 border">Email</th>
+                            <th class="px-6 py-2 border" >ID Number</th>
+                            <th class="px-4 py-2 border" >Company</th>
+                            <th class="px-6 py-2 border" >Phone</th>
+                            <th class="px-6 py-2 border" >Department</th>
+                            <th class="px-14 py-2 border">Visit Purpose</th>
+                            <th class="px-12 py-2 border text-center">Start Period</th>
+                            <th class="px-12 py-2 border text-center">End Period</th>
+                            <th class="px-3 py-2 border" >Equipment</th>
+                            <th class="px-3 py-2 border" >Brand</th>
+                            <th class="px-5 py-2 border" >ID Card</th>
+                            <th class="px-5 py-2 border">Self Photo</th>
+                            <th class="px-12 py-2 border text-center" >Submit Date</th>
+                            <th class="px-12 py-2 border text-center">Status</th>
+                            <th class="px-12 py-2 border text-center">Approved Date</th>
+                            <th class="px-3 py-2 border">Action</th>
                         </tr>
                     </thead>
                     <tbody>
                         @forelse($visitors as $i => $visitor)
                             <tr class="border-b hover:bg-gray-50 dark:hover:bg-neutral-800">
                                 <td class="px-3 py-2 border text-center">{{ $i+1 }}</td>
-                                <td class="px-3 py-2 border">{{ $visitor->full_name }}</td>
-                                <td class="px-3 py-2 border">{{ $visitor->nik }}</td>
-                                <td class="px-3 py-2 border">{{ $visitor->company }}</td>
-                                <td class="px-3 py-2 border">{{ $visitor->phone }}</td>
-                                <td class="px-3 py-2 border">{{ $visitor->department_purpose }}</td>
-                                <td class="px-3 py-2 border">{{ $visitor->section_purpose }}</td>
-                                <td class="px-3 py-2 border">{{ \Illuminate\Support\Carbon::parse($visitor->visit_datetime)->format('Y-m-d') }}</td>
-                                <td class="px-3 py-2 border">{{ \Illuminate\Support\Carbon::parse($visitor->visit_datetime)->format('H:i') }}</td>
+                                <td class="px-6 py-2 border">{{ $visitor->fullname }}</td>
+                                <td class="px-6 py-2 border">{{ $visitor->email }}</td>
+                                <td class="px-6 py-2 border">{{ $visitor->nik }}</td>
+                                <td class="px-6 py-2 border">{{ $visitor->company }}</td>
+                                <td class="px-6 py-2 border">{{ $visitor->phone }}</td>
+                                <td class="px-6 py-2 border">
+                                    @php
+                                        $deptName = DB::table('depts')->where('deptID', $visitor->deptpurpose)->value('nameDept');
+                                    @endphp
+                                    {{ $deptName }}
+                                </td>
+                                <td class="px-14 py-2 border">{{ $visitor->visit_purpose }}</td>
+                                <td class="px-8 py-2 border text-center">{{ \Carbon\Carbon::parse($visitor->startdate)->format('d-m-Y H:i') }}</td>
+                                <td class="px-8 py-2 border text-center">{{ \Carbon\Carbon::parse($visitor->enddate)->format('d-m-Y H:i') }}</td>
+                                <td class="px-6 py-2 border">{{ $visitor->equipment_type }}</td>
+                                <td class="px-6 py-2 border">{{ $visitor->brand }}</td>
                                 <td class="px-3 py-2 border text-center">
-                                    @if($visitor->id_card_photo)
-                                        <a href="{{ asset('storage/' . $visitor->id_card_photo) }}" target="_blank" class="text-blue-600 underline">View</a>
+                                    @if($visitor->idcardphoto)
+                                        <a href="{{ asset('storage/' . $visitor->idcardphoto) }}" target="_blank" class="text-blue-600 underline">View</a>
                                     @endif
                                 </td>
                                 <td class="px-3 py-2 border text-center">
-                                    @if($visitor->self_photo)
-                                        <a href="{{ asset('storage/' . $visitor->self_photo) }}" target="_blank" class="text-blue-600 underline">View</a>
+                                    @if($visitor->selfphoto)
+                                        <a href="{{ asset('storage/' . $visitor->selfphoto) }}" target="_blank" class="text-blue-600 underline">View</a>
                                     @endif
                                 </td>
-                                <td class="px-3 py-2 border">{{ $visitor->created_at }}</td>
-                                <td class="px-3 py-2 border text-center">
-                                    <span class="px-2 py-1 text-xs font-medium rounded-full 
+                                <td class="px-8 py-2 border text-center">{{ \Carbon\Carbon::parse($visitor->submit_date)->format('d-m-Y H:i') }}</td>
+                                <td class="px-12 py-2 border text-center">
+                                    <span class="text-center
                                         @if($visitor->status === 'Accepted') text-green-800
                                         @elseif($visitor->status === 'Rejected') text-red-800
-                                        @else text-yellow-800 flex justify-center items-center
+                                        @elseif($visitor->status === 'For Review') text-green-600
+                                        @else text-gray-800
                                         @endif">
                                         {{ $visitor->status }}
                                     </span>
                                 </td>
-                                <td class="px-2 py-2 border text-center" style="min-width: 180px;">
-                                    <div class="inline-block">
-                                        <button onclick="updateStatus({{ $visitor->id }}, 'Accepted', this)" class="bg-green-600 text-white px-2 py-1 rounded text-xs hover:bg-green-700 transition">Approve</button>
-                                        <button onclick="updateStatus({{ $visitor->id }}, 'Rejected', this)" class="bg-red-600 text-white px-2 py-1 rounded text-xs hover:bg-red-700 transition">Decline</button>
-                                    </div>
+                                <td class="px-8 py-2 border text-center">
+                                    @if($visitor->approved_date)
+                                        {{ \Carbon\Carbon::parse($visitor->approved_date)->format('d-m-Y H:i') }}
+                                    @else
+                                        -
+                                    @endif
+                                </td>
+                                <td class="px-3 py-2 border text-center">
+                                    @if($visitor->status === 'For Review')
+                                        <div class="inline-block">
+                                            <button onclick="updateStatus({{ $visitor->id }}, 'Accepted', this)" class="bg-green-600 text-white px-2 py-1 rounded text-xs hover:bg-green-700 transition">Approve</button>
+                                            <button onclick="updateStatus({{ $visitor->id }}, 'Rejected', this)" class="bg-red-600 text-white px-2 py-1 rounded text-xs hover:bg-red-700 transition">Decline</button>
+                                        </div>
+                                    @endif
                                 </td>
                             </tr>
                         @empty
                             <tr>
-                                <td colspan="12" class="text-center py-4">No visitors found.</td>
+                                <td colspan="18" class="text-center py-4">No visitors found.</td>
                             </tr>
                         @endforelse
                     </tbody>

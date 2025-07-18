@@ -102,7 +102,9 @@ class VisitorController extends Controller
 
     public function index()
     {
-        $visitors = \DB::table('visitors')->orderByDesc('created_at')->get();
+        $visitors = DB::table('visitors')
+            ->orderByDesc('submit_date')
+            ->get();
         return view('visitor-list', compact('visitors'));
     }
 
@@ -190,7 +192,9 @@ class VisitorController extends Controller
 
     public function export()
     {
-        $visitors = DB::table('visitors')->orderByDesc('created_at')->get();
+        $visitors = DB::table('visitors')
+            ->orderByDesc('submit_date')
+            ->get();
         return Excel::download(new VisitorExport($visitors), 'visitors.xlsx');
     }
 
