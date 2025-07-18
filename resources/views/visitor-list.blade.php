@@ -25,37 +25,42 @@
     <div class="container-fluid px-4 py-8">
         <div class="bg-white dark:bg-neutral-900 p-8 px-4 sm:px-8 rounded-xl shadow">
             <h2 class="text-2xl font-bold mb-6 text-center">Visitor Registration List</h2>
-            <div class="flex justify-end mb-4">
+            <div class="flex justify-end items-center gap-4 mb-4">
+                <button onclick="updateSelectedStatus('Accepted')" class="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 transition">Approve Selected</button>
+                <button onclick="updateSelectedStatus('Rejected')" class="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700 transition">Decline Selected</button>
                 <a href="{{ route('visitors.export') }}" class="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 transition">Export to Excel</a>
             </div>
             <div class="overflow-x-auto">
                 <table class="w-full border-collapse border text-sm">
                     <thead>
                         <tr class="bg-gray-200 dark:bg-neutral-800">
-                            <th class="px-3 py-2 border">No</th>
+                            <th class="px-3 py-2 border">
+                                <input type="checkbox" id="selectAll" class="rounded border-gray-300" onclick="toggleAllCheckboxes()">
+                            </th>
                             <th class="px-4 py-2 border">Full Name</th>
                             <th class="px-6 py-2 border">Email</th>
-                            <th class="px-6 py-2 border" >ID Number</th>
-                            <th class="px-4 py-2 border" >Company</th>
-                            <th class="px-6 py-2 border" >Phone</th>
-                            <th class="px-6 py-2 border" >Department</th>
+                            <th class="px-6 py-2 border">ID Number</th>
+                            <th class="px-4 py-2 border">Company</th>
+                            <th class="px-6 py-2 border">Phone</th>
+                            <th class="px-6 py-2 border">Department</th>
                             <th class="px-14 py-2 border">Visit Purpose</th>
                             <th class="px-12 py-2 border text-center">Start Period</th>
                             <th class="px-12 py-2 border text-center">End Period</th>
-                            <th class="px-3 py-2 border" >Equipment</th>
-                            <th class="px-3 py-2 border" >Brand</th>
-                            <th class="px-5 py-2 border" >ID Card</th>
+                            <th class="px-3 py-2 border">Equipment</th>
+                            <th class="px-3 py-2 border">Brand</th>
+                            <th class="px-5 py-2 border">ID Card</th>
                             <th class="px-5 py-2 border">Self Photo</th>
-                            <th class="px-12 py-2 border text-center" >Submit Date</th>
+                            <th class="px-12 py-2 border text-center">Submit Date</th>
                             <th class="px-12 py-2 border text-center">Status</th>
                             <th class="px-12 py-2 border text-center">Approved Date</th>
-                            <th class="px-3 py-2 border">Action</th>
                         </tr>
                     </thead>
                     <tbody>
-                        @forelse($visitors as $i => $visitor)
+                        @forelse($visitors as $visitor)
                             <tr class="border-b hover:bg-gray-50 dark:hover:bg-neutral-800">
-                                <td class="px-3 py-2 border text-center">{{ $i+1 }}</td>
+                                <td class="px-3 py-2 border text-center">
+                                    <input type="checkbox" class="visitor-checkbox rounded border-gray-300" value="{{ $visitor->id }}">
+                                </td>
                                 <td class="px-6 py-2 border">{{ $visitor->fullname }}</td>
                                 <td class="px-6 py-2 border">{{ $visitor->email }}</td>
                                 <td class="px-6 py-2 border">{{ $visitor->nik }}</td>
@@ -84,11 +89,7 @@
                                 </td>
                                 <td class="px-8 py-2 border text-center">{{ \Carbon\Carbon::parse($visitor->submit_date)->format('d-m-Y H:i') }}</td>
                                 <td class="px-12 py-2 border text-center">
-                                    <span class="text-center
-                                        @if($visitor->status === 'For Review') text-blue-600
-                                        @endif">
-                                        {{ $visitor->status }}
-                                    </span>
+                                    <span class="text-center">{{ $visitor->status }}</span>
                                 </td>
                                 <td class="px-8 py-2 border text-center">
                                     @if($visitor->approved_date)
@@ -97,16 +98,10 @@
                                         -
                                     @endif
                                 </td>
-                                <td class="px-3 py-2 border text-center">
-                                    <div class="inline-block">
-                                        <button onclick="updateStatus({{ $visitor->id }}, 'Accepted', this)" class="bg-green-600 text-white px-2 py-1 rounded text-xs hover:bg-green-700 transition">Approve</button>
-                                        <button onclick="updateStatus({{ $visitor->id }}, 'Rejected', this)" class="bg-red-600 text-white px-2 py-1 rounded text-xs hover:bg-red-700 transition">Decline</button>
-                                    </div>
-                                </td>
                             </tr>
                         @empty
                             <tr>
-                                <td colspan="18" class="text-center py-4">No visitors found.</td>
+                                <td colspan="17" class="text-center py-4">No visitors found.</td>
                             </tr>
                         @endforelse
                     </tbody>
@@ -114,40 +109,47 @@
             </div>
         </div>
     </div>
+
     <script>
-        function updateStatus(id, status, btn) {
-            fetch('/visitors/' + id + '/status', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-CSRF-TOKEN': '{{ csrf_token() }}'
-                },
-                body: JSON.stringify({ status })
-            })
-            .then(res => res.json())
-            .then(data => {
-                console.log('Response:', data);
-                
-                if (data.success) {
-                    // Update status text in the same row
-                    const row = btn.closest('tr');
-                    const statusCell = row.querySelector('span');
-                    statusCell.textContent = data.status;
-                    if (data.status === 'Approved (2/2)') {
-                        statusCell.className = 'text-center';
-                    } else if (data.status === 'Declined') {
-                        statusCell.className = 'text-center';
-                    } else {
-                        statusCell.className = 'text-center';
-                    }
-                    // Don't hide action buttons anymore
-                } else {
-                    alert(data.message || 'Failed to update status');
+        function toggleAllCheckboxes() {
+            const mainCheckbox = document.getElementById('selectAll');
+            const checkboxes = document.getElementsByClassName('visitor-checkbox');
+            for (let checkbox of checkboxes) {
+                checkbox.checked = mainCheckbox.checked;
+            }
+        }
+
+        function updateSelectedStatus(status) {
+            const checkboxes = document.getElementsByClassName('visitor-checkbox');
+            const selectedIds = [];
+            
+            for (let checkbox of checkboxes) {
+                if (checkbox.checked) {
+                    selectedIds.push(checkbox.value);
                 }
+            }
+
+            if (selectedIds.length === 0) {
+                return; // Do nothing if no visitors selected
+            }
+
+            // Update status for each selected visitor
+            Promise.all(selectedIds.map(id => 
+                fetch('/visitors/' + id + '/status', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRF-TOKEN': '{{ csrf_token() }}'
+                    },
+                    body: JSON.stringify({ status })
+                }).then(res => res.json())
+            ))
+            .then(() => {
+                // Refresh the page to show updated statuses
+                window.location.reload();
             })
             .catch(error => {
                 console.error('Error:', error);
-                alert('Error updating status: ' + error.message);
             });
         }
     </script>
