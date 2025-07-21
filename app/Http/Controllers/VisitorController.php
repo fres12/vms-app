@@ -123,10 +123,38 @@ class VisitorController extends Controller
 
     public function index()
     {
-        $visitors = DB::table('visitors')
-            ->orderByDesc('submit_date')
-            ->get();
-        return view('visitor-list', compact('visitors'));
+        $admin = auth()->guard('admin')->user();
+        
+        // Query dasar
+        $query = DB::table('visitors')
+            ->select(
+                'visitors.*',
+                'depts.nameDept as department_name',
+                'accounts.name as pic_name',
+                'accounts.position as pic_position',
+                'accounts.no_employee as pic_employee_id'
+            )
+            ->leftJoin('depts', 'visitors.deptpurpose', '=', 'depts.deptID')
+            ->leftJoin('accounts', 'visitors.deptpurpose', '=', 'accounts.deptID')
+            ->orderByDesc('visitors.submit_date');
+
+        // Jika bukan master admin (deptID != 1), filter berdasarkan departemen tujuan
+        if ($admin->deptID !== 1) {
+            $query->where('visitors.deptpurpose', $admin->deptID);
+        }
+
+        $visitors = $query->get();
+
+        // Get department info for header
+        $deptInfo = DB::table('depts')
+            ->where('deptID', $admin->deptID)
+            ->first();
+
+        return view('visitor-list', [
+            'visitors' => $visitors,
+            'isMasterAdmin' => $admin->deptID === 1,
+            'deptInfo' => $deptInfo
+        ]);
     }
 
     public function approve($id)
@@ -222,11 +250,6 @@ class VisitorController extends Controller
     public function updateStatus(Request $request, $id)
     {
         try {
-            \Log::info('Updating visitor status', [
-                'visitor_id' => $id,
-                'status' => $request->status
-            ]);
-
             $request->validate([
                 'status' => 'required|in:Accepted,Rejected',
             ]);
@@ -234,7 +257,6 @@ class VisitorController extends Controller
             // Check if visitor exists
             $visitor = DB::table('visitors')->where('id', $id)->first();
             if (!$visitor) {
-                \Log::warning('Visitor not found', ['id' => $id]);
                 return response()->json([
                     'success' => false,
                     'message' => 'Visitor not found'
@@ -244,63 +266,75 @@ class VisitorController extends Controller
             // Get current admin's deptID
             $admin = auth()->guard('admin')->user();
             if (!$admin) {
-                \Log::warning('Admin not authenticated');
                 return response()->json([
                     'success' => false,
                     'message' => 'Admin not authenticated'
                 ]);
             }
 
-            \Log::info('Admin authenticated', [
-                'admin_id' => $admin->id,
-                'deptID' => $admin->deptID
-            ]);
+            // Cek apakah admin adalah master admin
+            $isMasterAdmin = $admin->deptID === 1;
+            
+            // Cek apakah admin adalah dept yang dituju
+            $isDeptPurpose = $admin->deptID === $visitor->deptpurpose;
 
-            $now = now();
             if ($request->status === 'Accepted') {
-                // Untuk approve, tidak perlu cek deptID karena sudah dihandle di middleware
-                $newStatus = 'Approved (2/2)';
-                $approvedDate = $now;
+                // Validasi status untuk master admin
+                if ($isMasterAdmin) {
+                    if ($visitor->status !== 'Approved (1/2)') {
+                        return response()->json([
+                            'success' => false,
+                            'message' => 'Master admin can only approve visitors with status "Approved (1/2)"'
+                        ]);
+                    }
+                    $newStatus = 'Approved (2/2)';
+                }
+                // Validasi status untuk dept purpose
+                else if ($isDeptPurpose) {
+                    if ($visitor->status !== 'For Review') {
+                        return response()->json([
+                            'success' => false,
+                            'message' => 'Department can only approve visitors with status "For Review"'
+                        ]);
+                    }
+                    $newStatus = 'Approved (1/2)';
+                }
+                // Jika bukan master admin atau dept purpose
+                else {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'You are not authorized to approve this visitor'
+                    ]);
+                }
             } else {
+                // Untuk decline, cek apakah user adalah master admin atau dept purpose
+                if (!$isMasterAdmin && !$isDeptPurpose) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'You are not authorized to decline this visitor'
+                    ]);
+                }
                 $newStatus = 'Declined';
-                $approvedDate = null;
             }
-
-            \Log::info('Updating status in database', [
-                'old_status' => $visitor->status,
-                'new_status' => $newStatus
-            ]);
 
             $updated = DB::table('visitors')
                 ->where('id', $id)
                 ->update([
                     'status' => $newStatus,
-                    'approved_date' => $approvedDate
+                    'approved_date' => $request->status === 'Accepted' ? now() : null
                 ]);
 
             if (!$updated) {
-                \Log::error('Failed to update visitor status in database', [
-                    'visitor_id' => $id
-                ]);
                 return response()->json([
                     'success' => false,
                     'message' => 'Failed to update visitor status'
                 ]);
             }
 
-            // Get the updated visitor data to get the exact MySQL timestamp
-            $visitor = DB::table('visitors')->where('id', $id)->first();
-
-            \Log::info('Status updated successfully', [
-                'visitor_id' => $id,
-                'new_status' => $newStatus,
-                'approved_date' => $visitor->approved_date
-            ]);
-
             return response()->json([
                 'success' => true,
                 'status' => $newStatus,
-                'approved_date' => $visitor->approved_date,
+                'approved_date' => $request->status === 'Accepted' ? now() : null,
                 'message' => 'Status updated successfully'
             ]);
 
@@ -328,7 +362,7 @@ class VisitorController extends Controller
             'password' => 'required',
         ]);
 
-        // First try with MD5 (legacy)
+        // Check using MD5
         $admin = DB::table('accounts')
             ->where('email', $request->email)
             ->where('password', md5($request->password))

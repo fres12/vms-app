@@ -3,83 +3,111 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Visitor List</title>
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css">
+    <title>Visitor List - {{ $isMasterAdmin ? 'All Departments' : $deptInfo->nameDept }}</title>
+    @vite('resources/css/app.css')
 </head>
-<body class="bg-gray-100">
+<body class="bg-[#fbfbfc]">
     @include('layouts.admin-header')
 
-    <!-- Existing content -->
-    <div class="container-fluid px-4 py-8">
-        <div class="bg-white dark:bg-neutral-900 p-8 px-4 sm:px-8 rounded-xl shadow">
-            <h2 class="text-2xl font-bold mb-6 text-center">Visitor Registration List</h2>
-            <div class="flex justify-end items-center gap-4 mb-4">
-                <button onclick="updateSelectedStatus('Approve Selected')" class="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 transition">Approve Selected</button>
-                <button onclick="updateSelectedStatus('Decline Selected')" class="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700 transition">Decline Selected</button>
-                <a href="{{ route('visitors.export') }}" class="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 transition">Export to Excel</a>
+    <!-- Cover section -->
+    <div class="container-fluid px-4">
+        <div class="relative w-full flex flex-col items-center justify-center mt-4">
+            <div class="absolute inset-0 z-10 bg-[#003368] opacity-70 rounded-xl"></div>
+            <img src="/storage/cover.jpg" alt="Hyundai" class="w-full h-24 sm:h-32 md:h-36 object-cover object-center z-0 rounded-xl"/>
+            <div class="absolute inset-0 flex items-center justify-center z-20 px-2">
+                <h2 class="text-white font-medium text-center text-base sm:text-xl md:text-2xl leading-tight break-words w-full max-w-xl">
+                    @if($isMasterAdmin)
+                        All Departments Visitor List
+                    @else
+                        {{ $deptInfo->nameDept }} Department Visitor List
+                    @endif
+                </h2>
             </div>
-            <div class="overflow-x-auto">
-                <table class="w-full border-collapse border text-sm">
+        </div>
+
+        <!-- Table section -->
+        <div class="bg-white dark:bg-neutral-900 p-8 px-4 sm:px-8 rounded-xl shadow mt-4">
+            <div class="flex justify-end items-center gap-1 mb-2">
+                <button type="button" 
+                        onclick="updateSelectedStatus('Approve Selected')" 
+                        style="background-color: #003368;"
+                        class="text-white px-3 py-1.5 rounded text-xs hover:bg-[#002244] transition-colors">
+                    Approve
+                </button>
+                <button type="button"
+                        onclick="updateSelectedStatus('Decline Selected')" 
+                        style="background-color: #003368;"
+                        class="text-white px-3 py-1.5 rounded text-xs hover:bg-[#002244] transition-colors">
+                    Decline
+                </button>
+                <a href="{{ route('visitors.export') }}" 
+                   style="background-color: #003368;"
+                   class="text-white px-3 py-1.5 rounded text-xs hover:bg-[#002244] transition-colors">
+                    Export
+                </a>
+            </div>
+
+            <div class="overflow-x-auto relative">
+                <table class="w-full border-collapse border text-xs">
                     <thead>
-                        <tr class="bg-gray-200 dark:bg-neutral-800">
-                            <th class="px-3 py-2 border">
+                        <tr class="bg-[#003368] dark:bg-neutral-800">
+                            <th class="sticky left-0 bg-[#003368] border border-white px-1.5 py-1 z-20">
                                 <input type="checkbox" id="selectAll" class="rounded border-gray-300" onclick="toggleAllCheckboxes()">
                             </th>
-                            <th class="px-4 py-2 border">Full Name</th>
-                            <th class="px-6 py-2 border">Email</th>
-                            <th class="px-6 py-2 border">ID Number</th>
-                            <th class="px-4 py-2 border">Company</th>
-                            <th class="px-6 py-2 border">Phone</th>
-                            <th class="px-6 py-2 border">Department</th>
-                            <th class="px-14 py-2 border">Visit Purpose</th>
-                            <th class="px-12 py-2 border text-center">Start Period</th>
-                            <th class="px-12 py-2 border text-center">End Period</th>
-                            <th class="px-3 py-2 border">Equipment</th>
-                            <th class="px-3 py-2 border">Brand</th>
-                            <th class="px-5 py-2 border">ID Card</th>
-                            <th class="px-5 py-2 border">Self Photo</th>
-                            <th class="px-12 py-2 border text-center">Submit Date</th>
-                            <th class="px-12 py-2 border text-center">Status</th>
-                            <th class="px-12 py-2 border text-center">Approved Date</th>
+                            <th class="px-4 py-1 border text-white">Full Name</th>
+                            <th class="px-6 py-1 border text-white">Email</th>
+                            <th class="px-6 py-1 border text-white">ID Number</th>
+                            <th class="px-4 py-1 border text-white">Company</th>
+                            <th class="px-6 py-1 border text-white">Phone</th>
+                            @if($isMasterAdmin)
+                                <th class="px-6 py-1 border text-white">Department</th>
+                            @endif
+                            <th class="px-10 py-1 border text-white">Visit Purpose</th>
+                            <th class="px-6 py-1 border text-center text-white">Start Period</th>
+                            <th class="px-6 py-1 border text-center text-white">End Period</th>
+                            <th class="px-3 py-1 border text-white">Equipment</th>
+                            <th class="px-3 py-1 border text-white">Brand</th>
+                            <th class="px-3 py-1 border text-white">ID Card</th>
+                            <th class="px-3 py-1 border text-white">Self Photo</th>
+                            <th class="px-6 py-1 border text-center text-white">Submit Date</th>
+                            <th class="px-6 py-1 border text-center text-white">Status</th>
+                            <th class="px-6 py-1 border text-center text-white">Approved Date</th>
                         </tr>
                     </thead>
                     <tbody>
                         @forelse($visitors as $visitor)
                             <tr class="border-b hover:bg-gray-50 dark:hover:bg-neutral-800">
-                                <td class="px-3 py-2 border text-center">
+                                <td class="sticky left-0 bg-white border border-gray-200 p-1.5 text-center z-10">
                                     <input type="checkbox" class="visitor-checkbox rounded border-gray-300" value="{{ $visitor->id }}">
                                 </td>
-                                <td class="px-6 py-2 border">{{ $visitor->fullname }}</td>
-                                <td class="px-6 py-2 border">{{ $visitor->email }}</td>
-                                <td class="px-6 py-2 border">{{ $visitor->nik }}</td>
-                                <td class="px-6 py-2 border">{{ $visitor->company }}</td>
-                                <td class="px-6 py-2 border">{{ $visitor->phone }}</td>
-                                <td class="px-6 py-2 border">
-                                    @php
-                                        $deptName = DB::table('depts')->where('deptID', $visitor->deptpurpose)->value('nameDept');
-                                    @endphp
-                                    {{ $deptName }}
-                                </td>
-                                <td class="px-14 py-2 border">{{ $visitor->visit_purpose }}</td>
-                                <td class="px-8 py-2 border text-center">{{ \Carbon\Carbon::parse($visitor->startdate)->format('d-m-Y H:i') }}</td>
-                                <td class="px-8 py-2 border text-center">{{ \Carbon\Carbon::parse($visitor->enddate)->format('d-m-Y H:i') }}</td>
-                                <td class="px-6 py-2 border">{{ $visitor->equipment_type }}</td>
-                                <td class="px-6 py-2 border">{{ $visitor->brand }}</td>
-                                <td class="px-3 py-2 border text-center">
+                                <td class="p-1.5 border">{{ $visitor->fullname }}</td>
+                                <td class="p-1.5 border">{{ $visitor->email }}</td>
+                                <td class="p-1.5 border">{{ $visitor->nik }}</td>
+                                <td class="p-1.5 border">{{ $visitor->company }}</td>
+                                <td class="p-1.5 border">{{ $visitor->phone }}</td>
+                                @if($isMasterAdmin)
+                                    <td class="p-1.5 border">{{ $visitor->department_name }}</td>
+                                @endif
+                                <td class="p-1.5 border">{{ $visitor->visit_purpose }}</td>
+                                <td class="p-1.5 border">{{ \Carbon\Carbon::parse($visitor->startdate)->format('d-m-Y H:i') }}</td>
+                                <td class="p-1.5 border">{{ \Carbon\Carbon::parse($visitor->enddate)->format('d-m-Y H:i') }}</td>
+                                <td class="p-1.5 border">{{ $visitor->equipment_type }}</td>
+                                <td class="p-1.5 border">{{ $visitor->brand }}</td>
+                                <td class="p-1.5 border text-center">
                                     @if($visitor->idcardphoto)
                                         <a href="{{ asset('storage/' . $visitor->idcardphoto) }}" target="_blank" class="text-blue-600 underline">View</a>
                                     @endif
                                 </td>
-                                <td class="px-3 py-2 border text-center">
+                                <td class="p-1.5 border text-center">
                                     @if($visitor->selfphoto)
                                         <a href="{{ asset('storage/' . $visitor->selfphoto) }}" target="_blank" class="text-blue-600 underline">View</a>
                                     @endif
                                 </td>
-                                <td class="px-8 py-2 border text-center">{{ \Carbon\Carbon::parse($visitor->submit_date)->format('d-m-Y H:i') }}</td>
-                                <td class="px-12 py-2 border text-center">
+                                <td class="p-1.5 border">{{ \Carbon\Carbon::parse($visitor->submit_date)->format('d-m-Y H:i') }}</td>
+                                <td class="p-1.5 border text-center">
                                     <span class="text-center">{{ $visitor->status }}</span>
                                 </td>
-                                <td class="px-8 py-2 border text-center">
+                                <td class="p-1.5 border">
                                     @if($visitor->approved_date)
                                         {{ \Carbon\Carbon::parse($visitor->approved_date)->format('d-m-Y H:i') }}
                                     @else
@@ -89,7 +117,7 @@
                             </tr>
                         @empty
                             <tr>
-                                <td colspan="17" class="text-center py-4">No visitors found.</td>
+                                <td colspan="{{ $isMasterAdmin ? 18 : 17 }}" class="text-center p-1.5">No visitors found.</td>
                             </tr>
                         @endforelse
                     </tbody>
