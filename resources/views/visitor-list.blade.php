@@ -19,7 +19,7 @@
                     @if($isMasterAdmin)
                         All Departments Visitor List
                     @else
-                        {{ $deptInfo->nameDept }} Department Visitor List
+                        {{ $deptInfo->nameDept }} Visitor List
                     @endif
                 </h2>
             </div>
