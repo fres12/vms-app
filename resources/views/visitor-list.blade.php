@@ -21,13 +21,124 @@
         </form>
     </div>
 
+    <script>
+        function toggleAllCheckboxes() {
+            const mainCheckbox = document.getElementById('selectAll');
+            const checkboxes = document.getElementsByClassName('visitor-checkbox');
+            for (let checkbox of checkboxes) {
+                checkbox.checked = mainCheckbox.checked;
+            }
+        }
+
+        function formatDate(dateString) {
+            if (!dateString) return '-';
+            const date = new Date(dateString);
+            const day = String(date.getDate()).padStart(2, '0');
+            const month = String(date.getMonth() + 1).padStart(2, '0');
+            const year = date.getFullYear();
+            const hours = String(date.getHours()).padStart(2, '0');
+            const minutes = String(date.getMinutes()).padStart(2, '0');
+            return `${day}-${month}-${year} ${hours}:${minutes}`;
+        }
+
+        function updateVisitorRow(visitorId, newStatus, approvedDate) {
+            console.log('Updating row:', { visitorId, newStatus, approvedDate });
+            const row = document.querySelector(`input[value="${visitorId}"]`).closest('tr');
+            const statusCell = row.querySelector('td:nth-last-child(2)');
+            const approvedDateCell = row.querySelector('td:last-child');
+            
+            // Update status text
+            statusCell.querySelector('span').textContent = newStatus;
+            
+            // Format dan update approved date
+            if (approvedDate) {
+                const date = new Date(approvedDate);
+                const day = String(date.getDate()).padStart(2, '0');
+                const month = String(date.getMonth() + 1).padStart(2, '0');
+                const year = date.getFullYear();
+                const hours = String(date.getHours()).padStart(2, '0');
+                const minutes = String(date.getMinutes()).padStart(2, '0');
+                approvedDateCell.textContent = `${day}-${month}-${year} ${hours}:${minutes}`;
+            } else {
+                approvedDateCell.textContent = '-';
+            }
+            
+            console.log('Row updated successfully');
+        }
+
+        function updateSelectedStatus(action) {
+            console.log('Starting status update with action:', action);
+            const checkboxes = document.getElementsByClassName('visitor-checkbox');
+            const selectedIds = [];
+            
+            for (let checkbox of checkboxes) {
+                if (checkbox.checked) {
+                    selectedIds.push(checkbox.value);
+                }
+            }
+
+            console.log('Selected IDs:', selectedIds);
+
+            if (selectedIds.length === 0) {
+                console.log('No visitors selected');
+                return;
+            }
+
+            // Map action to status
+            const status = action === 'Approve Selected' ? 'Accepted' : 'Rejected';
+
+            // Update status for each selected visitor
+            selectedIds.forEach(id => {
+                console.log('Processing visitor ID:', id, 'with status:', status);
+                fetch('/visitors/' + id + '/status', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRF-TOKEN': '{{ csrf_token() }}'
+                    },
+                    body: JSON.stringify({ status })
+                })
+                .then(res => {
+                    console.log('Response status:', res.status);
+                    return res.json();
+                })
+                .then(data => {
+                    console.log('Response data:', data);
+                    if (data.success) {
+                        // Update UI immediately without page reload
+                        updateVisitorRow(
+                            id, 
+                            data.status,
+                            data.approved_date
+                        );
+                        
+                        // Uncheck the checkbox
+                        document.querySelector(`input[value="${id}"]`).checked = false;
+                        
+                        // Update selectAll checkbox if needed
+                        const allUnchecked = Array.from(document.getElementsByClassName('visitor-checkbox'))
+                            .every(cb => !cb.checked);
+                        if (allUnchecked) {
+                            document.getElementById('selectAll').checked = false;
+                        }
+                    } else {
+                        console.error('Failed to update status:', data.message);
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                });
+            });
+        }
+    </script>
+
     <!-- Existing content -->
     <div class="container-fluid px-4 py-8">
         <div class="bg-white dark:bg-neutral-900 p-8 px-4 sm:px-8 rounded-xl shadow">
             <h2 class="text-2xl font-bold mb-6 text-center">Visitor Registration List</h2>
             <div class="flex justify-end items-center gap-4 mb-4">
-                <button onclick="updateSelectedStatus('Accepted')" class="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 transition">Approve Selected</button>
-                <button onclick="updateSelectedStatus('Rejected')" class="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700 transition">Decline Selected</button>
+                <button onclick="updateSelectedStatus('Approve Selected')" class="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 transition">Approve Selected</button>
+                <button onclick="updateSelectedStatus('Decline Selected')" class="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700 transition">Decline Selected</button>
                 <a href="{{ route('visitors.export') }}" class="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 transition">Export to Excel</a>
             </div>
             <div class="overflow-x-auto">
@@ -109,49 +220,5 @@
             </div>
         </div>
     </div>
-
-    <script>
-        function toggleAllCheckboxes() {
-            const mainCheckbox = document.getElementById('selectAll');
-            const checkboxes = document.getElementsByClassName('visitor-checkbox');
-            for (let checkbox of checkboxes) {
-                checkbox.checked = mainCheckbox.checked;
-            }
-        }
-
-        function updateSelectedStatus(status) {
-            const checkboxes = document.getElementsByClassName('visitor-checkbox');
-            const selectedIds = [];
-            
-            for (let checkbox of checkboxes) {
-                if (checkbox.checked) {
-                    selectedIds.push(checkbox.value);
-                }
-            }
-
-            if (selectedIds.length === 0) {
-                return; // Do nothing if no visitors selected
-            }
-
-            // Update status for each selected visitor
-            Promise.all(selectedIds.map(id => 
-                fetch('/visitors/' + id + '/status', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-CSRF-TOKEN': '{{ csrf_token() }}'
-                    },
-                    body: JSON.stringify({ status })
-                }).then(res => res.json())
-            ))
-            .then(() => {
-                // Refresh the page to show updated statuses
-                window.location.reload();
-            })
-            .catch(error => {
-                console.error('Error:', error);
-            });
-        }
-    </script>
 </body>
 </html> 

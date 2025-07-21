@@ -63,30 +63,51 @@ class VisitorController extends Controller
                 'approved_date' => null
             ]);
 
-            // Send email notification to admin
+            // Send email notification to PIC of selected department
             try {
-                // Get the admin email from the accounts table where deptID = 1 (master)
-                $adminEmail = DB::table('accounts')
-                    ->where('deptID', 1)
+                // Get the PIC email from the accounts table where deptID = tujuan dept
+                $picEmail = DB::table('accounts')
+                    ->where('deptID', $request->deptpurpose)
                     ->value('email');
 
-                if ($adminEmail) {
+                \Log::info('Attempting to send email notification to department PIC', [
+                    'deptID' => $request->deptpurpose,
+                    'picEmail' => $picEmail
+                ]);
+
+                if ($picEmail) {
                     // Get department name for email
                     $deptName = DB::table('depts')
                         ->where('deptID', $request->deptpurpose)
                         ->value('nameDept');
 
-                    Mail::to($adminEmail)->send(new VisitorNotification([
+                    \Log::info('Sending visitor notification email', [
+                        'to' => $picEmail,
+                        'department' => $deptName,
+                        'visitor_name' => $request->full_name
+                    ]);
+
+                    Mail::to($picEmail)->send(new VisitorNotification([
                         'name' => $request->full_name,
                         'company' => $request->company,
                         'visit_purpose' => $request->visit_purpose,
                         'startdate' => $request->startdate,
                         'enddate' => $request->enddate,
-                        'department' => $deptName
+                        'department' => $deptName,
+                        'submit_date' => now()
                     ]));
+
+                    \Log::info('Email notification sent successfully');
+                } else {
+                    \Log::warning('No PIC email found for department', [
+                        'deptID' => $request->deptpurpose
+                    ]);
                 }
             } catch (\Exception $e) {
-                \Log::error('Failed to send email notification: ' . $e->getMessage());
+                \Log::error('Failed to send email notification', [
+                    'error' => $e->getMessage(),
+                    'trace' => $e->getTraceAsString()
+                ]);
                 // Continue execution even if email fails
             }
 
@@ -201,6 +222,11 @@ class VisitorController extends Controller
     public function updateStatus(Request $request, $id)
     {
         try {
+            \Log::info('Updating visitor status', [
+                'visitor_id' => $id,
+                'status' => $request->status
+            ]);
+
             $request->validate([
                 'status' => 'required|in:Accepted,Rejected',
             ]);
@@ -208,6 +234,7 @@ class VisitorController extends Controller
             // Check if visitor exists
             $visitor = DB::table('visitors')->where('id', $id)->first();
             if (!$visitor) {
+                \Log::warning('Visitor not found', ['id' => $id]);
                 return response()->json([
                     'success' => false,
                     'message' => 'Visitor not found'
@@ -217,46 +244,71 @@ class VisitorController extends Controller
             // Get current admin's deptID
             $admin = auth()->guard('admin')->user();
             if (!$admin) {
+                \Log::warning('Admin not authenticated');
                 return response()->json([
                     'success' => false,
                     'message' => 'Admin not authenticated'
                 ]);
             }
 
+            \Log::info('Admin authenticated', [
+                'admin_id' => $admin->id,
+                'deptID' => $admin->deptID
+            ]);
+
+            $now = now();
             if ($request->status === 'Accepted') {
-                if ($admin->deptID != 1) {
-                    return response()->json([
-                        'success' => false,
-                        'message' => 'Only master admin can approve visitors'
-                    ]);
-                }
+                // Untuk approve, tidak perlu cek deptID karena sudah dihandle di middleware
                 $newStatus = 'Approved (2/2)';
+                $approvedDate = $now;
             } else {
                 $newStatus = 'Declined';
+                $approvedDate = null;
             }
+
+            \Log::info('Updating status in database', [
+                'old_status' => $visitor->status,
+                'new_status' => $newStatus
+            ]);
 
             $updated = DB::table('visitors')
                 ->where('id', $id)
                 ->update([
                     'status' => $newStatus,
-                    'approved_date' => $request->status === 'Accepted' ? now() : null
+                    'approved_date' => $approvedDate
                 ]);
 
             if (!$updated) {
+                \Log::error('Failed to update visitor status in database', [
+                    'visitor_id' => $id
+                ]);
                 return response()->json([
                     'success' => false,
                     'message' => 'Failed to update visitor status'
                 ]);
             }
 
+            // Get the updated visitor data to get the exact MySQL timestamp
+            $visitor = DB::table('visitors')->where('id', $id)->first();
+
+            \Log::info('Status updated successfully', [
+                'visitor_id' => $id,
+                'new_status' => $newStatus,
+                'approved_date' => $visitor->approved_date
+            ]);
+
             return response()->json([
                 'success' => true,
                 'status' => $newStatus,
+                'approved_date' => $visitor->approved_date,
                 'message' => 'Status updated successfully'
             ]);
 
         } catch (\Exception $e) {
-            \Log::error('Error updating visitor status: ' . $e->getMessage());
+            \Log::error('Error updating visitor status', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
             return response()->json([
                 'success' => false,
                 'message' => 'An error occurred while updating status'

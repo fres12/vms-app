@@ -12,18 +12,22 @@ class AccountSeeder extends Seeder
      */
     public function run(): void
     {
-        DB::table('accounts')->insert([
-            [
-                'id' => 1,
-                'email' => 'admin@hmmi.co.id',
+        $departments = DB::table('depts')->get();
+        $accounts = [];
+        $now = now();
+        foreach ($departments as $dept) {
+            $email = strtolower(str_replace(' ', '_', $dept->nameDept)) . '@hmmi.co.id';
+            $accounts[] = [
+                'email' => $email,
                 'password' => md5('Hmmi12345!'),
-                'no_employee' => '0000000000',
-                'name' => 'Admin Master',
-                'position' => 'Administrator',
-                'deptID' => 1, // master dept (changed from 0 to 1)
-                'created_at' => now(),
-                'updated_at' => now(),
-            ],
-        ]);
+                'no_employee' => str_pad($dept->deptID, 10, '0', STR_PAD_LEFT),
+                'name' => ucfirst($dept->nameDept) . ' Admin',
+                'position' => 'Department Admin',
+                'deptID' => $dept->deptID,
+                'created_at' => $now,
+                'updated_at' => $now,
+            ];
+        }
+        DB::table('accounts')->insert($accounts);
     }
 } 

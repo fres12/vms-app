@@ -475,7 +475,7 @@
 
                 <div class="mb-6">
                     <h3 class="text-lg font-medium text-gray-900 mb-2">Additional Requirements</h3>
-                    <p class="text-gray-600 mb-4">Please specify if you are bringing additional items (such as electronics) or have any special requirements</p>
+                    <p class="text-gray-600 mb-4">Please specify if you are bringing additional items (e.g. electronic devices, tools, etc.) or have any special requirements</p>
                     
                     <div class="relative mb-4">
                         <input
