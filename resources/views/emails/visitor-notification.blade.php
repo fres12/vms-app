@@ -7,7 +7,7 @@
     <div style="max-width: 600px; margin: 0 auto; padding: 20px;">
         <h2 style="color: #003368;">Visitor Registration - {{ $data['status'] }}</h2>
         
-        <p>Dear {{ isset($data['recipient_name']) ? $data['recipient_name'] : 'Admin' }},</p>
+        <p>Dear {{ isset($data['recipient_name']) ? $data['recipient_name'] : $data['name'] }},</p>
 
         <div style="margin: 20px 0;">
             <p><strong>{{ $data['message'] }}</strong></p>
@@ -55,6 +55,21 @@
                     </td>
                 </tr>
             </table>
+
+            @if(isset($data['ticket_number']) && isset($data['barcode']))
+                <div style="margin-top: 20px; padding: 20px; border: 2px solid #003368; border-radius: 8px;">
+                    <h3 style="color: #003368; margin-top: 0;">Visitor Pass</h3>
+                    <p style="margin-bottom: 15px;"><strong>Ticket Number:</strong> {{ $data['ticket_number'] }}</p>
+                    <div style="text-align: center;">
+                        <img src="data:image/png;base64,{{ $data['barcode'] }}" 
+                             alt="Barcode" 
+                             style="max-width: 300px; width: 100%;">
+                    </div>
+                    <p style="font-size: 12px; color: #666; margin-top: 15px; text-align: center;">
+                        Please show this visitor pass at the security checkpoint
+                    </p>
+                </div>
+            @endif
         </div>
 
         @if($data['status'] === 'For Review')

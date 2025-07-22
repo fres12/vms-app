@@ -19,7 +19,8 @@ class VisitorNotification extends Mailable
 
     public function build()
     {
-        return $this->subject('Visitor Registration - ' . $this->data['status'])
+        return $this->to($this->data['to'])
+                    ->subject('Visitor Registration - ' . $this->data['status'])
                     ->view('emails.visitor-notification');
     }
 } 

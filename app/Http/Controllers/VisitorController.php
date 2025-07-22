@@ -71,7 +71,9 @@ class VisitorController extends Controller
                 'brand' => $request->brand,
                 'status' => 'For Review',
                 'submit_date' => now(),
-                'approved_date' => null
+                'approved_date' => null,
+                'ticket_number' => null,
+                'barcode' => null
             ]);
 
             // Get department admin
@@ -87,7 +89,7 @@ class VisitorController extends Controller
             }
 
             // Send email notification to department admin
-            Mail::to($deptAdmin->email)->send(new VisitorNotification([
+            Mail::send(new VisitorNotification([
                 'recipient_name' => $deptAdmin->name,
                 'name' => $request->full_name,
                 'company' => $request->company,
@@ -96,7 +98,8 @@ class VisitorController extends Controller
                 'enddate' => $request->enddate,
                 'department' => $dept->nameDept,
                 'status' => 'For Review',
-                'message' => "A new visitor has requested approval for your department. Please review this request."
+                'message' => "A new visitor has requested approval for your department. Please review this request.",
+                'to' => $deptAdmin->email
             ]));
 
             DB::commit();
@@ -252,6 +255,18 @@ class VisitorController extends Controller
         return Excel::download(new VisitorExport($visitors), 'visitors.xlsx');
     }
 
+    private function generateTicketNumber($visitorId)
+    {
+        // Format: VMS-YYYYMMDD-XXXX where XXXX is the visitor ID padded with zeros
+        return 'VMS-' . date('Ymd') . '-' . str_pad($visitorId, 4, '0', STR_PAD_LEFT);
+    }
+
+    private function generateBarcode($ticketNumber)
+    {
+        $generator = new \Picqer\Barcode\BarcodeGeneratorPNG();
+        return base64_encode($generator->getBarcode($ticketNumber, $generator::TYPE_CODE_128));
+    }
+
     public function updateStatus(Request $request, $id)
     {
         try {
@@ -322,78 +337,107 @@ class VisitorController extends Controller
                 }
             }
 
+            // Generate ticket number and barcode for final approval
+            $ticketNumber = null;
+            $barcode = null;
+            if ($newStatus === 'Approved (2/2)') {
+                $ticketNumber = $this->generateTicketNumber($id);
+                $barcode = $this->generateBarcode($ticketNumber);
+            }
+
             // Update visitor status
             $updated = DB::table('visitors')
                 ->where('id', $id)
                 ->update([
                     'status' => $newStatus,
-                    'approved_date' => $newStatus === 'Approved (2/2)' ? Carbon::now()->format('d-m-Y H:i') : null
+                    'approved_date' => $newStatus === 'Approved (2/2)' ? now() : null,
+                    'ticket_number' => $ticketNumber,
+                    'barcode' => $barcode
                 ]);
 
             if (!$updated) {
                 throw new \Exception('Failed to update visitor status');
             }
 
-            // Send email notifications based on new status
-            try {
-                if ($newStatus === 'Approved (1/2)') {
-                    // Get master admin
-                    $masterAdmin = DB::table('accounts')
-                        ->where('deptID', 1)
-                        ->first();
+            DB::commit();
 
-                    if ($masterAdmin) {
-                        Mail::to($masterAdmin->email)->send(new VisitorNotification([
-                            'recipient_name' => $masterAdmin->name,
-                            'name' => $visitor->fullname,
-                            'company' => $visitor->company,
-                            'visit_purpose' => $visitor->visit_purpose,
-                            'startdate' => $visitor->startdate,
-                            'enddate' => $visitor->enddate,
-                            'department' => $dept->nameDept,
-                            'status' => 'Needs Final Approval',
-                            'deadline' => $deadlineDate->format('d-m-Y H:i'),
-                            'message' => "This visitor has been approved by {$dept->nameDept} department and needs your final approval."
-                        ]));
-                    }
-                } elseif ($newStatus === 'Approved (2/2)') {
-                    Mail::to($visitor->email)->send(new VisitorNotification([
+            // Send email notifications based on new status
+            if ($newStatus === 'Approved (1/2)') {
+                // Get master admin
+                $masterAdmin = DB::table('accounts')
+                    ->where('deptID', 1)
+                    ->first();
+
+                if ($masterAdmin) {
+                    \Log::info('Sending email to master admin', [
+                        'master_admin_email' => $masterAdmin->email,
+                        'visitor_id' => $id,
+                        'status' => $newStatus
+                    ]);
+
+                    Mail::send(new VisitorNotification([
+                        'recipient_name' => $masterAdmin->name,
                         'name' => $visitor->fullname,
                         'company' => $visitor->company,
                         'visit_purpose' => $visitor->visit_purpose,
                         'startdate' => $visitor->startdate,
                         'enddate' => $visitor->enddate,
                         'department' => $dept->nameDept,
-                        'status' => 'Approved',
-                        'message' => 'Your visit request has been fully approved.'
+                        'status' => 'Needs Final Approval',
+                        'deadline' => $deadlineDate->format('d-m-Y H:i'),
+                        'message' => "This visitor has been approved by {$dept->nameDept} department and needs your final approval.",
+                        'to' => $masterAdmin->email
                     ]));
-                } elseif ($newStatus === 'Declined') {
-                    Mail::to($visitor->email)->send(new VisitorNotification([
-                        'name' => $visitor->fullname,
-                        'company' => $visitor->company,
-                        'visit_purpose' => $visitor->visit_purpose,
-                        'startdate' => $visitor->startdate,
-                        'enddate' => $visitor->enddate,
-                        'department' => $dept->nameDept,
-                        'status' => 'Declined',
-                        'message' => isset($message) ? $message : 'Your visit request has been declined.'
-                    ]));
+
+                    \Log::info('Email sent successfully to master admin', [
+                        'master_admin_email' => $masterAdmin->email,
+                        'visitor_id' => $id
+                    ]);
+                } else {
+                    \Log::error('Master admin not found', [
+                        'visitor_id' => $id
+                    ]);
                 }
-            } catch (\Exception $e) {
-                \Log::error('Failed to send email notification', [
-                    'error' => $e->getMessage(),
-                    'trace' => $e->getTraceAsString(),
-                    'visitor_id' => $id
-                ]);
-                // Continue even if email fails
+            } elseif ($newStatus === 'Approved (2/2)') {
+                Mail::send(new VisitorNotification([
+                    'name' => $visitor->fullname,
+                    'company' => $visitor->company,
+                    'visit_purpose' => $visitor->visit_purpose,
+                    'startdate' => $visitor->startdate,
+                    'enddate' => $visitor->enddate,
+                    'department' => $dept->nameDept,
+                    'status' => 'Approved',
+                    'message' => 'Your visit request has been fully approved.',
+                    'ticket_number' => $ticketNumber,
+                    'barcode' => $barcode,
+                    'to' => $visitor->email
+                ]));
+            } elseif ($newStatus === 'Declined') {
+                Mail::send(new VisitorNotification([
+                    'name' => $visitor->fullname,
+                    'company' => $visitor->company,
+                    'visit_purpose' => $visitor->visit_purpose,
+                    'startdate' => $visitor->startdate,
+                    'enddate' => $visitor->enddate,
+                    'department' => $dept->nameDept,
+                    'status' => 'Declined',
+                    'message' => isset($message) ? $message : 'Your visit request has been declined.',
+                    'to' => $visitor->email
+                ]));
             }
 
-            DB::commit();
+            // Format the approved_date for response
+            $approvedDate = null;
+            if ($newStatus === 'Approved (2/2)') {
+                $approvedDate = Carbon::now()->format('d-m-Y H:i');
+            }
 
             return response()->json([
                 'success' => true,
                 'status' => $newStatus,
-                'approved_date' => $newStatus === 'Approved (2/2)' ? Carbon::now()->format('d-m-Y H:i') : null,
+                'approved_date' => $approvedDate,
+                'ticket_number' => $ticketNumber,
+                'barcode' => $barcode,
                 'message' => isset($message) ? $message : 'Status updated successfully'
             ]);
 

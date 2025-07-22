@@ -9,10 +9,10 @@ return new class extends Migration
     /**
      * Run the migrations.
      */
-    public function up(): void
+    public function up()
     {
         Schema::create('visitors', function (Blueprint $table) {
-            $table->bigIncrements('id');
+            $table->id();
             $table->string('fullname');
             $table->string('email');
             $table->string('nik');
@@ -20,17 +20,19 @@ return new class extends Migration
             $table->string('selfphoto');
             $table->string('company')->nullable();
             $table->string('phone')->nullable();
-            $table->unsignedBigInteger('deptpurpose')->nullable();
-            $table->string('visit_purpose');
+            $table->unsignedBigInteger('deptpurpose');
+            $table->text('visit_purpose');
             $table->dateTime('startdate');
             $table->dateTime('enddate');
             $table->string('equipment_type')->nullable();
             $table->string('brand')->nullable();
-            $table->string('status')->nullable();
-            $table->dateTime('submit_date')->nullable();
+            $table->string('status')->default('For Review');
+            $table->dateTime('submit_date');
             $table->dateTime('approved_date')->nullable();
+            $table->string('ticket_number')->nullable();
+            $table->text('barcode')->nullable();
 
-            $table->foreign('deptpurpose')->references('deptID')->on('depts')->onDelete('set null');
+            $table->foreign('deptpurpose')->references('deptID')->on('depts');
         });
     }
 
