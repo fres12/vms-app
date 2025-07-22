@@ -143,7 +143,67 @@
                 }
             }
 
-            function updateSelectedStatus(action) {
+            function showLoadingOverlay() {
+                const overlay = document.createElement('div');
+                overlay.id = 'loadingOverlay';
+                overlay.style.cssText = `
+                    position: fixed;
+                    top: 0;
+                    left: 0;
+                    width: 100%;
+                    height: 100%;
+                    background: rgba(255, 255, 255, 0.8);
+                    display: flex;
+                    justify-content: center;
+                    align-items: center;
+                    z-index: 9999;
+                `;
+                
+                const spinner = document.createElement('div');
+                spinner.style.cssText = `
+                    width: 50px;
+                    height: 50px;
+                    border: 5px solid #f3f3f3;
+                    border-top: 5px solid #003368;
+                    border-radius: 50%;
+                    animation: spin 1s linear infinite;
+                `;
+                
+                const style = document.createElement('style');
+                style.textContent = '@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }';
+                
+                document.head.appendChild(style);
+                overlay.appendChild(spinner);
+                document.body.appendChild(overlay);
+            }
+
+            function hideLoadingOverlay() {
+                const overlay = document.getElementById('loadingOverlay');
+                if (overlay) {
+                    overlay.remove();
+                }
+            }
+
+            async function reloadTableData() {
+                try {
+                    const response = await fetch(window.location.href);
+                    const html = await response.text();
+                    const parser = new DOMParser();
+                    const doc = parser.parseFromString(html, 'text/html');
+                    
+                    // Get the new table content
+                    const newTable = doc.querySelector('.overflow-x-auto table');
+                    const currentTable = document.querySelector('.overflow-x-auto table');
+                    
+                    if (newTable && currentTable) {
+                        currentTable.innerHTML = newTable.innerHTML;
+                    }
+                } catch (error) {
+                    console.error('Error reloading table:', error);
+                }
+            }
+
+            async function updateSelectedStatus(action) {
                 const checkboxes = document.getElementsByClassName('visitor-checkbox');
                 const selectedIds = [];
                 const invalidStatusSelected = [];
@@ -193,58 +253,51 @@
 
                 // If it's an export action, handle differently
                 if (action === 'Export Selected') {
-                    // Create a form to submit the selected IDs
-                    const form = document.createElement('form');
-                    form.method = 'POST';
-                    form.action = '{{ route('visitors.export') }}';
-                    
-                    // Add CSRF token
-                    const csrfToken = document.createElement('input');
-                    csrfToken.type = 'hidden';
-                    csrfToken.name = '_token';
-                    csrfToken.value = '{{ csrf_token() }}';
-                    form.appendChild(csrfToken);
-
-                    // Add selected IDs
-                    selectedIds.forEach(id => {
-                        const input = document.createElement('input');
-                        input.type = 'hidden';
-                        input.name = 'selected_ids[]';
-                        input.value = id;
-                        form.appendChild(input);
-                    });
-
-                    document.body.appendChild(form);
-                    form.submit();
+                    window.location.href = '{{ route('visitors.export') }}?' + selectedIds.map(id => 'selected_ids[]=' + id).join('&');
                     return;
                 }
 
-                // Update status for each selected visitor
-                Promise.all(selectedIds.map(id => 
-                    fetch('/visitors/' + id + '/status', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                            'X-CSRF-TOKEN': '{{ csrf_token() }}'
-                        },
-                        body: JSON.stringify({ status })
-                    })
-                    .then(res => res.json())
-                    .then(response => {
-                        if (!response.success) {
-                            throw new Error(response.message || 'Failed to update status');
-                        }
-                        return response;
-                    })
-                ))
-                .then(() => {
-                    // Refresh page after update
-                    window.location.reload();
-                })
-                .catch(error => {
+                // Show loading overlay
+                showLoadingOverlay();
+
+                try {
+                    // Process all updates in parallel
+                    const updatePromises = selectedIds.map(id =>
+                        fetch('/visitors/' + id + '/status', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'X-CSRF-TOKEN': '{{ csrf_token() }}'
+                            },
+                            body: JSON.stringify({ status })
+                        }).then(res => res.json())
+                    );
+
+                    // Wait for all updates to complete
+                    const results = await Promise.all(updatePromises);
+                    
+                    // Check if any update failed
+                    const failures = results.filter(result => !result.success);
+                    if (failures.length > 0) {
+                        throw new Error(failures[0].message || 'Failed to update some statuses');
+                    }
+
+                    // Reload table data
+                    await reloadTableData();
+
+                    // Uncheck all checkboxes
+                    document.getElementById('selectAll').checked = false;
+                    for (let checkbox of checkboxes) {
+                        checkbox.checked = false;
+                    }
+
+                } catch (error) {
                     alert(error.message || 'An error occurred while updating status');
                     console.error('Error:', error);
-                });
+                } finally {
+                    // Hide loading overlay
+                    hideLoadingOverlay();
+                }
             }
         </script>
 </body>

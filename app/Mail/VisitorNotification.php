@@ -10,19 +10,16 @@ class VisitorNotification extends Mailable
 {
     use Queueable, SerializesModels;
 
-    public $visitor;
+    public $data;
 
-    public function __construct($visitor)
+    public function __construct($data)
     {
-        $this->visitor = $visitor;
+        $this->data = $data;
     }
 
     public function build()
     {
-        return $this->subject('New Visitor Registration')
-                    ->view('emails.visitor-notification')
-                    ->with([
-                        'visitor' => $this->visitor
-                    ]);
+        return $this->subject('Visitor Registration - ' . $this->data['status'])
+                    ->view('emails.visitor-notification');
     }
 } 

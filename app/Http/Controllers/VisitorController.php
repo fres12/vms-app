@@ -37,14 +37,25 @@ class VisitorController extends Controller
         ]);
 
         try {
+            DB::beginTransaction();
+
             // Handle ID Card Photo Upload
             $idCardPhotoPath = $request->file('id_card_photo')->store('id_cards', 'public');
             
             // Handle Self Photo Upload
             $selfPhotoPath = $request->file('self_photo')->store('self_photos', 'public');
 
+            // Get department info
+            $dept = DB::table('depts')
+                ->where('deptID', $request->deptpurpose)
+                ->first();
+
+            if (!$dept) {
+                throw new \Exception('Department not found');
+            }
+
             // Insert into database
-            DB::table('visitors')->insert([
+            $visitorId = DB::table('visitors')->insertGetId([
                 'fullname' => $request->full_name,
                 'email' => $request->email,
                 'nik' => $request->nik,
@@ -63,58 +74,46 @@ class VisitorController extends Controller
                 'approved_date' => null
             ]);
 
-            // Send email notification to PIC of selected department
-            try {
-                // Get the PIC email from the accounts table where deptID = tujuan dept
-                $picEmail = DB::table('accounts')
-                    ->where('deptID', $request->deptpurpose)
-                    ->value('email');
+            // Get department admin
+            $deptAdmin = DB::table('accounts')
+                ->where('deptID', $request->deptpurpose)
+                ->first();
 
-                \Log::info('Attempting to send email notification to department PIC', [
-                    'deptID' => $request->deptpurpose,
-                    'picEmail' => $picEmail
+            if (!$deptAdmin) {
+                \Log::error('Department admin not found', [
+                    'dept_id' => $request->deptpurpose
                 ]);
-
-                if ($picEmail) {
-                    // Get department name for email
-                    $deptName = DB::table('depts')
-                        ->where('deptID', $request->deptpurpose)
-                        ->value('nameDept');
-
-                    \Log::info('Sending visitor notification email', [
-                        'to' => $picEmail,
-                        'department' => $deptName,
-                        'visitor_name' => $request->full_name
-                    ]);
-
-                    Mail::to($picEmail)->send(new VisitorNotification([
-                        'name' => $request->full_name,
-                        'company' => $request->company,
-                        'visit_purpose' => $request->visit_purpose,
-                        'startdate' => $request->startdate,
-                        'enddate' => $request->enddate,
-                        'department' => $deptName,
-                        'submit_date' => now()
-                    ]));
-
-                    \Log::info('Email notification sent successfully');
-                } else {
-                    \Log::warning('No PIC email found for department', [
-                        'deptID' => $request->deptpurpose
-                    ]);
-                }
-            } catch (\Exception $e) {
-                \Log::error('Failed to send email notification', [
-                    'error' => $e->getMessage(),
-                    'trace' => $e->getTraceAsString()
-                ]);
-                // Continue execution even if email fails
+                throw new \Exception('Department admin not found');
             }
+
+            // Send email notification to department admin
+            Mail::to($deptAdmin->email)->send(new VisitorNotification([
+                'recipient_name' => $deptAdmin->name,
+                'name' => $request->full_name,
+                'company' => $request->company,
+                'visit_purpose' => $request->visit_purpose,
+                'startdate' => $request->startdate,
+                'enddate' => $request->enddate,
+                'department' => $dept->nameDept,
+                'status' => 'For Review',
+                'message' => "A new visitor has requested approval for your department. Please review this request."
+            ]));
+
+            DB::commit();
+
+            \Log::info('Visitor registration successful', [
+                'visitor_id' => $visitorId,
+                'dept_admin_email' => $deptAdmin->email
+            ]);
 
             return redirect()->back()->with('success', 'Your visitor registration has been submitted successfully. Please wait for approval.');
 
         } catch (\Exception $e) {
-            \Log::error('Error in visitor registration: ' . $e->getMessage());
+            DB::rollBack();
+            \Log::error('Error in visitor registration', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
             return redirect()->back()
                 ->withInput()
                 ->withErrors(['error' => 'An error occurred while processing your registration. Please try again.']);
@@ -256,6 +255,8 @@ class VisitorController extends Controller
     public function updateStatus(Request $request, $id)
     {
         try {
+            DB::beginTransaction();
+
             $request->validate([
                 'status' => 'required|in:Accepted,Rejected',
             ]);
@@ -263,19 +264,13 @@ class VisitorController extends Controller
             // Check if visitor exists
             $visitor = DB::table('visitors')->where('id', $id)->first();
             if (!$visitor) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Visitor not found'
-                ]);
+                throw new \Exception('Visitor not found');
             }
 
             // Get current admin's deptID
             $admin = auth()->guard('admin')->user();
             if (!$admin) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Admin not authenticated'
-                ]);
+                throw new \Exception('Admin not authenticated');
             }
 
             // Check if admin is master admin
@@ -284,59 +279,47 @@ class VisitorController extends Controller
             // Check if admin is the target department
             $isDeptPurpose = $admin->deptID === $visitor->deptpurpose;
 
-            // Check if the status can be changed based on current status
-            if ($visitor->status !== 'For Review' && $visitor->status !== 'Approved (1/2)') {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'This visitor\'s status cannot be changed anymore'
-                ]);
+            // Get department info
+            $dept = DB::table('depts')
+                ->where('deptID', $visitor->deptpurpose)
+                ->first();
+
+            if (!$dept) {
+                throw new \Exception('Department not found');
             }
 
-            if ($request->status === 'Accepted') {
-                // Master admin can only change from Approved (1/2) to Approved (2/2)
-                if ($isMasterAdmin) {
-                    if ($visitor->status !== 'Approved (1/2)') {
-                        return response()->json([
-                            'success' => false,
-                            'message' => 'Master admin can only approve visitors with status "Approved (1/2)"'
-                        ]);
-                    }
-                    $newStatus = 'Approved (2/2)';
-                }
-                // Department admin can only change from For Review to Approved (1/2)
-                else if ($isDeptPurpose) {
-                    if ($visitor->status !== 'For Review') {
-                        return response()->json([
-                            'success' => false,
-                            'message' => 'Department can only approve visitors with status "For Review"'
-                        ]);
-                    }
-                    $newStatus = 'Approved (1/2)';
-                }
-                // If not master admin or target department
-                else {
-                    return response()->json([
-                        'success' => false,
-                        'message' => 'You are not authorized to approve this visitor'
-                    ]);
-                }
-            } else { // Rejected status
-                // Can only reject if status is For Review
-                if ($visitor->status !== 'For Review') {
-                    return response()->json([
-                        'success' => false,
-                        'message' => 'Cannot decline a visitor that has already been approved'
-                    ]);
-                }
+            // Check if visit date is within allowed timeframe (before H-2 12:00)
+            $visitStartDate = Carbon::parse($visitor->startdate);
+            $deadlineDate = $visitStartDate->copy()->subDays(2)->setTime(12, 0, 0);
+            $now = Carbon::now();
 
-                // Check if user has authority to decline
-                if (!$isMasterAdmin && !$isDeptPurpose) {
-                    return response()->json([
-                        'success' => false,
-                        'message' => 'You are not authorized to decline this visitor'
-                    ]);
-                }
+            if ($now->greaterThan($deadlineDate)) {
                 $newStatus = 'Declined';
+                $message = 'Request automatically declined as it is past the deadline (H-2 12:00)';
+            } else {
+                if ($request->status === 'Accepted') {
+                    if ($isMasterAdmin) {
+                        if ($visitor->status !== 'Approved (1/2)') {
+                            throw new \Exception('Request approval to department admin first');
+                        }
+                        $newStatus = 'Approved (2/2)';
+                    } else if ($isDeptPurpose) {
+                        if ($visitor->status !== 'For Review') {
+                            throw new \Exception('Invalid state to change status');
+                        }
+                        $newStatus = 'Approved (1/2)';
+                    } else {
+                        throw new \Exception('You are not authorized to approve this visitor');
+                    }
+                } else {
+                    if ($visitor->status !== 'For Review') {
+                        throw new \Exception('Invalid state to change status');
+                    }
+                    if (!$isMasterAdmin && !$isDeptPurpose) {
+                        throw new \Exception('You are not authorized to decline this visitor');
+                    }
+                    $newStatus = 'Declined';
+                }
             }
 
             // Update visitor status
@@ -344,52 +327,86 @@ class VisitorController extends Controller
                 ->where('id', $id)
                 ->update([
                     'status' => $newStatus,
-                    'approved_date' => $newStatus === 'Approved (2/2)' ? now() : null
+                    'approved_date' => $newStatus === 'Approved (2/2)' ? Carbon::now()->format('d-m-Y H:i') : null
                 ]);
 
             if (!$updated) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Failed to update visitor status'
-                ]);
+                throw new \Exception('Failed to update visitor status');
             }
 
-            // Send email notification if status is Approved (2/2)
-            if ($newStatus === 'Approved (2/2)') {
-                try {
+            // Send email notifications based on new status
+            try {
+                if ($newStatus === 'Approved (1/2)') {
+                    // Get master admin
+                    $masterAdmin = DB::table('accounts')
+                        ->where('deptID', 1)
+                        ->first();
+
+                    if ($masterAdmin) {
+                        Mail::to($masterAdmin->email)->send(new VisitorNotification([
+                            'recipient_name' => $masterAdmin->name,
+                            'name' => $visitor->fullname,
+                            'company' => $visitor->company,
+                            'visit_purpose' => $visitor->visit_purpose,
+                            'startdate' => $visitor->startdate,
+                            'enddate' => $visitor->enddate,
+                            'department' => $dept->nameDept,
+                            'status' => 'Needs Final Approval',
+                            'deadline' => $deadlineDate->format('d-m-Y H:i'),
+                            'message' => "This visitor has been approved by {$dept->nameDept} department and needs your final approval."
+                        ]));
+                    }
+                } elseif ($newStatus === 'Approved (2/2)') {
                     Mail::to($visitor->email)->send(new VisitorNotification([
                         'name' => $visitor->fullname,
                         'company' => $visitor->company,
                         'visit_purpose' => $visitor->visit_purpose,
                         'startdate' => $visitor->startdate,
                         'enddate' => $visitor->enddate,
-                        'department' => DB::table('depts')->where('deptID', $visitor->deptpurpose)->value('nameDept'),
-                        'status' => 'Approved'
+                        'department' => $dept->nameDept,
+                        'status' => 'Approved',
+                        'message' => 'Your visit request has been fully approved.'
                     ]));
-                } catch (\Exception $e) {
-                    \Log::error('Failed to send approval notification email', [
-                        'error' => $e->getMessage(),
-                        'visitor_id' => $id
-                    ]);
-                    // Continue execution even if email fails
+                } elseif ($newStatus === 'Declined') {
+                    Mail::to($visitor->email)->send(new VisitorNotification([
+                        'name' => $visitor->fullname,
+                        'company' => $visitor->company,
+                        'visit_purpose' => $visitor->visit_purpose,
+                        'startdate' => $visitor->startdate,
+                        'enddate' => $visitor->enddate,
+                        'department' => $dept->nameDept,
+                        'status' => 'Declined',
+                        'message' => isset($message) ? $message : 'Your visit request has been declined.'
+                    ]));
                 }
+            } catch (\Exception $e) {
+                \Log::error('Failed to send email notification', [
+                    'error' => $e->getMessage(),
+                    'trace' => $e->getTraceAsString(),
+                    'visitor_id' => $id
+                ]);
+                // Continue even if email fails
             }
+
+            DB::commit();
 
             return response()->json([
                 'success' => true,
                 'status' => $newStatus,
-                'approved_date' => $newStatus === 'Approved (2/2)' ? now() : null,
-                'message' => 'Status updated successfully'
+                'approved_date' => $newStatus === 'Approved (2/2)' ? Carbon::now()->format('d-m-Y H:i') : null,
+                'message' => isset($message) ? $message : 'Status updated successfully'
             ]);
 
         } catch (\Exception $e) {
+            DB::rollBack();
             \Log::error('Error updating visitor status', [
                 'error' => $e->getMessage(),
-                'trace' => $e->getTraceAsString()
+                'trace' => $e->getTraceAsString(),
+                'visitor_id' => $id ?? null
             ]);
             return response()->json([
                 'success' => false,
-                'message' => 'An error occurred while updating status'
+                'message' => $e->getMessage()
             ]);
         }
     }
