@@ -125,7 +125,7 @@ class VisitorController extends Controller
     {
         $admin = auth()->guard('admin')->user();
         
-        // Query dasar
+        // Base query
         $query = DB::table('visitors')
             ->select(
                 'visitors.*',
@@ -138,7 +138,7 @@ class VisitorController extends Controller
             ->leftJoin('accounts', 'visitors.deptpurpose', '=', 'accounts.deptID')
             ->orderByDesc('visitors.submit_date');
 
-        // Jika bukan master admin (deptID != 1), filter berdasarkan departemen tujuan
+        // If not master admin (deptID != 1), filter by target department
         if ($admin->deptID !== 1) {
             $query->where('visitors.deptpurpose', $admin->deptID);
         }
@@ -153,7 +153,8 @@ class VisitorController extends Controller
         return view('visitor-list', [
             'visitors' => $visitors,
             'isMasterAdmin' => $admin->deptID === 1,
-            'deptInfo' => $deptInfo
+            'deptInfo' => $deptInfo,
+            'isDeptPurpose' => true // This will be true since we already filter by deptID above
         ]);
     }
 
@@ -239,11 +240,16 @@ class VisitorController extends Controller
         }
     }
 
-    public function export()
+    public function export(Request $request)
     {
-        $visitors = DB::table('visitors')
-            ->orderByDesc('submit_date')
-            ->get();
+        $query = DB::table('visitors');
+
+        // If specific visitors are selected
+        if ($request->has('selected_ids')) {
+            $query->whereIn('id', $request->selected_ids);
+        }
+
+        $visitors = $query->orderByDesc('submit_date')->get();
         return Excel::download(new VisitorExport($visitors), 'visitors.xlsx');
     }
 
@@ -272,14 +278,22 @@ class VisitorController extends Controller
                 ]);
             }
 
-            // Cek apakah admin adalah master admin
+            // Check if admin is master admin
             $isMasterAdmin = $admin->deptID === 1;
             
-            // Cek apakah admin adalah dept yang dituju
+            // Check if admin is the target department
             $isDeptPurpose = $admin->deptID === $visitor->deptpurpose;
 
+            // Check if the status can be changed based on current status
+            if ($visitor->status !== 'For Review' && $visitor->status !== 'Approved (1/2)') {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'This visitor\'s status cannot be changed anymore'
+                ]);
+            }
+
             if ($request->status === 'Accepted') {
-                // Validasi status untuk master admin
+                // Master admin can only change from Approved (1/2) to Approved (2/2)
                 if ($isMasterAdmin) {
                     if ($visitor->status !== 'Approved (1/2)') {
                         return response()->json([
@@ -289,7 +303,7 @@ class VisitorController extends Controller
                     }
                     $newStatus = 'Approved (2/2)';
                 }
-                // Validasi status untuk dept purpose
+                // Department admin can only change from For Review to Approved (1/2)
                 else if ($isDeptPurpose) {
                     if ($visitor->status !== 'For Review') {
                         return response()->json([
@@ -299,15 +313,23 @@ class VisitorController extends Controller
                     }
                     $newStatus = 'Approved (1/2)';
                 }
-                // Jika bukan master admin atau dept purpose
+                // If not master admin or target department
                 else {
                     return response()->json([
                         'success' => false,
                         'message' => 'You are not authorized to approve this visitor'
                     ]);
                 }
-            } else {
-                // Untuk decline, cek apakah user adalah master admin atau dept purpose
+            } else { // Rejected status
+                // Can only reject if status is For Review
+                if ($visitor->status !== 'For Review') {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Cannot decline a visitor that has already been approved'
+                    ]);
+                }
+
+                // Check if user has authority to decline
                 if (!$isMasterAdmin && !$isDeptPurpose) {
                     return response()->json([
                         'success' => false,
@@ -317,11 +339,12 @@ class VisitorController extends Controller
                 $newStatus = 'Declined';
             }
 
+            // Update visitor status
             $updated = DB::table('visitors')
                 ->where('id', $id)
                 ->update([
                     'status' => $newStatus,
-                    'approved_date' => $request->status === 'Accepted' ? now() : null
+                    'approved_date' => $newStatus === 'Approved (2/2)' ? now() : null
                 ]);
 
             if (!$updated) {
@@ -331,10 +354,31 @@ class VisitorController extends Controller
                 ]);
             }
 
+            // Send email notification if status is Approved (2/2)
+            if ($newStatus === 'Approved (2/2)') {
+                try {
+                    Mail::to($visitor->email)->send(new VisitorNotification([
+                        'name' => $visitor->fullname,
+                        'company' => $visitor->company,
+                        'visit_purpose' => $visitor->visit_purpose,
+                        'startdate' => $visitor->startdate,
+                        'enddate' => $visitor->enddate,
+                        'department' => DB::table('depts')->where('deptID', $visitor->deptpurpose)->value('nameDept'),
+                        'status' => 'Approved'
+                    ]));
+                } catch (\Exception $e) {
+                    \Log::error('Failed to send approval notification email', [
+                        'error' => $e->getMessage(),
+                        'visitor_id' => $id
+                    ]);
+                    // Continue execution even if email fails
+                }
+            }
+
             return response()->json([
                 'success' => true,
                 'status' => $newStatus,
-                'approved_date' => $request->status === 'Accepted' ? now() : null,
+                'approved_date' => $newStatus === 'Approved (2/2)' ? now() : null,
                 'message' => 'Status updated successfully'
             ]);
 
