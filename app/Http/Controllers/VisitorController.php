@@ -244,15 +244,46 @@ class VisitorController extends Controller
 
     public function export(Request $request)
     {
-        $query = DB::table('visitors');
+        $admin = auth()->guard('admin')->user();
+        $isMasterAdmin = $admin->deptID === 1;
+        $isDeptAdmin = !$isMasterAdmin;
+
+        $query = DB::table('visitors')
+            ->select(
+                'visitors.*',
+                'depts.nameDept as department_name',
+                DB::raw("CASE 
+                    WHEN visitors.idcardphoto IS NOT NULL 
+                    THEN CONCAT('" . url('storage') . "/', visitors.idcardphoto)
+                    ELSE NULL 
+                END as id_card_url"),
+                DB::raw("CASE 
+                    WHEN visitors.selfphoto IS NOT NULL 
+                    THEN CONCAT('" . url('storage') . "/', visitors.selfphoto)
+                    ELSE NULL 
+                END as self_photo_url")
+            )
+            ->leftJoin('depts', 'visitors.deptpurpose', '=', 'depts.deptID')
+            ->orderByDesc('visitors.submit_date');
+
+        // If not master admin, filter by department
+        if (!$isMasterAdmin) {
+            $query->where('visitors.deptpurpose', $admin->deptID);
+        }
 
         // If specific visitors are selected
         if ($request->has('selected_ids')) {
-            $query->whereIn('id', $request->selected_ids);
+            $query->whereIn('visitors.id', $request->selected_ids);
         }
 
-        $visitors = $query->orderByDesc('submit_date')->get();
-        return Excel::download(new VisitorExport($visitors), 'visitors.xlsx');
+        $visitors = $query->get();
+
+        $filename = 'visitors_' . now()->format('Y-m-d_His') . '.xlsx';
+        
+        return Excel::download(
+            new VisitorExport($visitors, $isMasterAdmin, $isDeptAdmin),
+            $filename
+        );
     }
 
     private function generateTicketNumber($visitorId)

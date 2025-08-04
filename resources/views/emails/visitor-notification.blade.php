@@ -14,7 +14,7 @@
             
             <h3 style="color: #003368;">Visitor Details:</h3>
             <table style="width: 100%; border-collapse: collapse; margin: 10px 0;">
-                <tr>
+            <tr>
                     <td style="padding: 8px 0;"><strong>Name:</strong></td>
                     <td>{{ $data['name'] }}</td>
                 </tr>
@@ -22,25 +22,25 @@
                 <tr>
                     <td style="padding: 8px 0;"><strong>Company:</strong></td>
                     <td>{{ $data['company'] }}</td>
-                </tr>
+            </tr>
                 @endif
-                <tr>
+            <tr>
                     <td style="padding: 8px 0;"><strong>Visit Purpose:</strong></td>
                     <td>{{ $data['visit_purpose'] }}</td>
-                </tr>
-                <tr>
+            </tr>
+            <tr>
                     <td style="padding: 8px 0;"><strong>Department:</strong></td>
                     <td>{{ $data['department'] }}</td>
-                </tr>
-                <tr>
+            </tr>
+            <tr>
                     <td style="padding: 8px 0;"><strong>Start Date:</strong></td>
                     <td>{{ \Carbon\Carbon::parse($data['startdate'])->format('d M Y H:i') }}</td>
-                </tr>
-                <tr>
+            </tr>
+            <tr>
                     <td style="padding: 8px 0;"><strong>End Date:</strong></td>
                     <td>{{ \Carbon\Carbon::parse($data['enddate'])->format('d M Y H:i') }}</td>
-                </tr>
-                <tr>
+            </tr>
+            <tr>
                     <td style="padding: 8px 0;"><strong>Status:</strong></td>
                     <td style="color: 
                         @if($data['status'] === 'Approved (2/2)' || $data['status'] === 'Approved')
@@ -53,8 +53,8 @@
                     ">
                         {{ $data['status'] }}
                     </td>
-                </tr>
-            </table>
+            </tr>
+        </table>
 
             @if(isset($data['ticket_number']) && isset($data['barcode']))
                 <div style="margin-top: 20px; padding: 20px; border: 2px solid #003368; border-radius: 8px;">

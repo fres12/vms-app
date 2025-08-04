@@ -42,8 +42,8 @@
                 </button>
                 <button type="button"
                         onclick="updateSelectedStatus('Export Selected')"
-                        style="background-color: #003368;"
-                        class="text-white px-3 py-1.5 rounded text-xs hover:bg-[#002244] transition-colors">
+                   style="background-color: #003368;"
+                   class="text-white px-3 py-1.5 rounded text-xs hover:bg-[#002244] transition-colors">
                     Export
                 </button>
             </div>
@@ -131,17 +131,17 @@
                         @endforelse
                     </tbody>
                 </table>
-            </div>
         </div>
+    </div>
 
-        <script>
-            function toggleAllCheckboxes() {
-                const mainCheckbox = document.getElementById('selectAll');
-                const checkboxes = document.getElementsByClassName('visitor-checkbox');
-                for (let checkbox of checkboxes) {
-                    checkbox.checked = mainCheckbox.checked;
-                }
+    <script>
+        function toggleAllCheckboxes() {
+            const mainCheckbox = document.getElementById('selectAll');
+            const checkboxes = document.getElementsByClassName('visitor-checkbox');
+            for (let checkbox of checkboxes) {
+                checkbox.checked = mainCheckbox.checked;
             }
+        }
 
             function showLoadingOverlay() {
                 const overlay = document.createElement('div');
@@ -204,12 +204,12 @@
             }
 
             async function updateSelectedStatus(action) {
-                const checkboxes = document.getElementsByClassName('visitor-checkbox');
-                const selectedIds = [];
+            const checkboxes = document.getElementsByClassName('visitor-checkbox');
+            const selectedIds = [];
                 const invalidStatusSelected = [];
-                
-                for (let checkbox of checkboxes) {
-                    if (checkbox.checked) {
+            
+            for (let checkbox of checkboxes) {
+                if (checkbox.checked) {
                         const status = checkbox.getAttribute('data-status');
                         const isMasterAdmin = {{ $isMasterAdmin ? 'true' : 'false' }};
                         
@@ -229,27 +229,27 @@
                             }
                         }
                         
-                        selectedIds.push(checkbox.value);
-                    }
+                    selectedIds.push(checkbox.value);
                 }
+            }
 
                 if (selectedIds.length === 0 && invalidStatusSelected.length > 0) {
                     alert(invalidStatusSelected[0]);
                     return;
                 }
 
-                if (selectedIds.length === 0) {
+            if (selectedIds.length === 0) {
                     alert('Please select at least one visitor');
                     return;
                 }
 
                 if (action !== 'Export Selected' && invalidStatusSelected.length > 0) {
                     alert(invalidStatusSelected[0]);
-                    return;
-                }
+                return;
+            }
 
-                // Map action to status
-                const status = action === 'Approve Selected' ? 'Accepted' : 'Rejected';
+            // Map action to status
+            const status = action === 'Approve Selected' ? 'Accepted' : 'Rejected';
 
                 // If it's an export action, handle differently
                 if (action === 'Export Selected') {
@@ -263,14 +263,14 @@
                 try {
                     // Process all updates in parallel
                     const updatePromises = selectedIds.map(id =>
-                        fetch('/visitors/' + id + '/status', {
-                            method: 'POST',
-                            headers: {
-                                'Content-Type': 'application/json',
-                                'X-CSRF-TOKEN': '{{ csrf_token() }}'
-                            },
-                            body: JSON.stringify({ status })
-                        }).then(res => res.json())
+                fetch('/visitors/' + id + '/status', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRF-TOKEN': '{{ csrf_token() }}'
+                    },
+                    body: JSON.stringify({ status })
+                }).then(res => res.json())
                     );
 
                     // Wait for all updates to complete
@@ -293,12 +293,12 @@
 
                 } catch (error) {
                     alert(error.message || 'An error occurred while updating status');
-                    console.error('Error:', error);
+                console.error('Error:', error);
                 } finally {
                     // Hide loading overlay
                     hideLoadingOverlay();
                 }
-            }
-        </script>
+        }
+    </script>
 </body>
 </html> 
