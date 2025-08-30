@@ -117,7 +117,7 @@
                 </div>
             @endif
 
-            <form action="{{ route('visitor.store') }}" method="POST" enctype="multipart/form-data">
+            <form id="visitorForm" action="{{ route('visitor.store') }}" method="POST" enctype="multipart/form-data" onsubmit="return false;">
                 @csrf
                 <div class="relative mb-4">
                     <input
@@ -538,15 +538,9 @@
                 <input type="hidden" name="status" value="For Review">
                 <input type="hidden" name="submit_date" value="{{ now() }}">
                 <input type="hidden" name="approved_date" value="">
+                <input type="hidden" name="pledge_agreement" id="pledge_agreement_hidden" value="0">
                 
-                <div class="mb-4">
-                    <label class="inline-flex items-center font-normal">
-                        <input type="checkbox" id="pledgeCheckbox" name="pledge_agreement" required class="form-checkbox mr-2 accent-[#003368]">
-                        <span>I have read and agree with to the the HMMI <button type="button" id="showPledgeBtn" class="underline text-[#003368] hover:text-[#002244]">visitor pledge</button></span>
-                    </label>
-                </div>
-                
-                <button id="submitBtn" type="submit" class="w-full bg-[#003368] text-white py-2 rounded hover:bg-[#002244] transition opacity-50 cursor-not-allowed" disabled>Submit</button>
+                <button id="nextBtn" type="button" class="w-full bg-[#003368] text-white py-3 rounded hover:bg-[#002244] transition font-medium text-lg">Next</button>
             </form>
         </div>
     </div>
@@ -567,15 +561,33 @@
                 </button>
                 <h3 class="text-xl font-bold mb-4 text-[#003368] dark:text-white text-center">Visitor Pledge</h3>
                 <div class="mb-6 text-gray-700 dark:text-gray-300">
-                    <p>By entering Hyundai Motor Manufacturing Indonesia, I pledge to comply with all visitor rules and regulations, respect the safety and security protocols, and conduct myself responsibly during my visit.</p>
+                    <p class="mb-4">By entering Hyundai Motor Manufacturing Indonesia, I pledge to comply with all visitor rules and regulations, respect the safety and security protocols, and conduct myself responsibly during my visit.</p>
+                    
+                    <div class="bg-gray-50 dark:bg-neutral-700 p-4 rounded-lg">
+                        <h4 class="font-semibold mb-2 text-gray-800 dark:text-gray-200">Visitor Rules & Regulations:</h4>
+                        <ul class="text-sm text-gray-600 dark:text-gray-400 space-y-1">
+                            <li>• Always wear visitor badge and safety equipment as required</li>
+                            <li>• Follow all safety instructions and emergency procedures</li>
+                            <li>• Stay within designated areas and respect restricted zones</li>
+                            <li>• Maintain professional behavior and dress code</li>
+                            <li>• Report any incidents or concerns immediately</li>
+                            <li>• Follow COVID-19 protocols if applicable</li>
+                        </ul>
+                    </div>
                 </div>
+                
+                <div class="mb-6">
+                    <label class="inline-flex items-center font-normal">
+                        <input type="checkbox" id="pledgeCheckbox" name="pledge_agreement" required class="form-checkbox mr-3 accent-[#003368] w-5 h-5">
+                        <span class="text-gray-700 dark:text-gray-300">I have read and accept the visitor pledge and agree to comply with all rules and regulations.</span>
+                    </label>
+                </div>
+                
                 <div class="flex justify-end space-x-4">
                     <button type="button" id="cancelPledgeBtn" class="px-4 py-2 text-gray-600 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200 transition-colors duration-200">
                         Cancel
                     </button>
-                    <button type="button" id="agreePledgeBtn" class="px-4 py-2 bg-[#003368] text-white rounded hover:bg-[#002244] transition-colors duration-200">
-                        I Agree
-                    </button>
+                    <button type="button" id="submitBtn" class="px-4 py-2 bg-[#003368] text-white rounded hover:bg-[#002244] transition-colors duration-200 opacity-50 cursor-not-allowed" disabled>Submit Application</button>
                 </div>
             </div>
         </div>
@@ -603,13 +615,61 @@
         document.addEventListener('DOMContentLoaded', function() {
             const pledgeCheckbox = document.getElementById('pledgeCheckbox');
             const submitBtn = document.getElementById('submitBtn');
+            const nextBtn = document.getElementById('nextBtn');
+            
+            // Show pledge modal when Next button is clicked
+            nextBtn.addEventListener('click', function() {
+                // Validate form first
+                const form = document.getElementById('visitorForm');
+                if (form.checkValidity()) {
+                    // Additional validation for required fields
+                    const requiredFields = form.querySelectorAll('[required]');
+                    let isValid = true;
+                    
+                    requiredFields.forEach(field => {
+                        if (!field.value.trim()) {
+                            isValid = false;
+                            field.focus();
+                        }
+                    });
+                    
+                    if (isValid) {
+                        showModal();
+                    }
+                } else {
+                    // Trigger validation display
+                    form.reportValidity();
+                }
+            });
+            
+            // Enable/disable submit button based on pledge checkbox
             pledgeCheckbox.addEventListener('change', function() {
+                const pledgeHiddenField = document.getElementById('pledge_agreement_hidden');
+                
                 if (this.checked) {
                     submitBtn.disabled = false;
                     submitBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+                    pledgeHiddenField.value = '1';
+                    console.log('Pledge checkbox checked, hidden field value:', pledgeHiddenField.value);
                 } else {
                     submitBtn.disabled = true;
                     submitBtn.classList.add('opacity-50', 'cursor-not-allowed');
+                    pledgeHiddenField.value = '0';
+                    console.log('Pledge checkbox unchecked, hidden field value:', pledgeHiddenField.value);
+                }
+            });
+            
+            // Handle form submission from pledge modal
+            submitBtn.addEventListener('click', function() {
+                if (pledgeCheckbox.checked) {
+                    // Ensure hidden field is set
+                    document.getElementById('pledge_agreement_hidden').value = '1';
+                    
+                    // Debug: log the value before submission
+                    console.log('Pledge agreement value before submit:', document.getElementById('pledge_agreement_hidden').value);
+                    
+                    // Submit the form
+                    document.getElementById('visitorForm').submit();
                 }
             });
         });
@@ -681,10 +741,8 @@
             const modal = document.getElementById('pledgeModal');
             const modalContent = document.getElementById('modalContent');
             const modalBackdrop = document.getElementById('modalBackdrop');
-            const showPledgeBtn = document.getElementById('showPledgeBtn');
             const closePledgeBtn = document.getElementById('closePledgeBtn');
             const cancelPledgeBtn = document.getElementById('cancelPledgeBtn');
-            const agreePledgeBtn = document.getElementById('agreePledgeBtn');
             const pledgeCheckbox = document.getElementById('pledgeCheckbox');
 
             // Calculate scrollbar width and set it as CSS variable
@@ -694,7 +752,8 @@
             // Get the scroll position before opening modal
             let scrollPosition = 0;
 
-            function showModal() {
+            // Make showModal function globally accessible
+            window.showModal = function() {
                 // Store current scroll position
                 scrollPosition = window.pageYOffset;
                 
@@ -710,7 +769,7 @@
                 
                 // Add modal-open class to body
                 document.body.classList.add('modal-open');
-            }
+            };
 
             function hideModal() {
                 // First animate out
@@ -724,27 +783,32 @@
                     document.body.classList.remove('modal-open');
                     // Restore scroll position
                     window.scrollTo(0, scrollPosition);
+                    
+                    // Reset pledge agreement if modal is closed without submission
+                    if (!pledgeCheckbox.checked) {
+                        document.getElementById('pledge_agreement_hidden').value = '0';
+                    }
                 }, 300);
             }
 
-            showPledgeBtn.addEventListener('click', showModal);
-            
             closePledgeBtn.addEventListener('click', hideModal);
             cancelPledgeBtn.addEventListener('click', () => {
                 pledgeCheckbox.checked = false;
+                // Reset hidden field
+                document.getElementById('pledge_agreement_hidden').value = '0';
                 hideModal();
-            });
-            
-            agreePledgeBtn.addEventListener('click', () => {
-                pledgeCheckbox.checked = true;
-                hideModal();
-                // Trigger the change event to update submit button state
-                pledgeCheckbox.dispatchEvent(new Event('change'));
+                // Reset submit button state
+                document.getElementById('submitBtn').disabled = true;
+                document.getElementById('submitBtn').classList.add('opacity-50', 'cursor-not-allowed');
             });
 
             // Close modal when clicking outside
             modal.addEventListener('click', (e) => {
                 if (e.target === modal || e.target === modalBackdrop) {
+                    // Reset pledge agreement when closing without submission
+                    if (!pledgeCheckbox.checked) {
+                        document.getElementById('pledge_agreement_hidden').value = '0';
+                    }
                     hideModal();
                 }
             });
@@ -752,6 +816,10 @@
             // Close modal with Escape key
             document.addEventListener('keydown', (e) => {
                 if (e.key === 'Escape' && !modal.classList.contains('hidden')) {
+                    // Reset pledge agreement when closing without submission
+                    if (!pledgeCheckbox.checked) {
+                        document.getElementById('pledge_agreement_hidden').value = '0';
+                    }
                     hideModal();
                 }
             });
@@ -775,6 +843,18 @@
                 // Set initial state
                 updateFileInput(input);
             });
+            
+            // Add image preview functionality
+            const idCardInput = document.getElementById('id_card_photo');
+            const selfPhotoInput = document.getElementById('self_photo');
+            
+            if (idCardInput) {
+                idCardInput.addEventListener('change', (e) => previewImage(e, 'id_card_preview'));
+            }
+            
+            if (selfPhotoInput) {
+                selfPhotoInput.addEventListener('change', (e) => previewImage(e, 'self_photo_preview'));
+            }
         });
     </script>
 </body>
