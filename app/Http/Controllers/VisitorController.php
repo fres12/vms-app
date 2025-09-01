@@ -493,42 +493,156 @@ class VisitorController extends Controller
 
     public function loginAdmin(Request $request)
     {
-        $request->validate([
-            'email' => 'required|email',
-            'password' => 'required',
+        // Rate limiting untuk mencegah brute force attack
+        $key = 'login_attempts_' . $request->ip();
+        $attempts = cache()->get($key, 0);
+        
+        if ($attempts >= 5) {
+            $lockoutTime = cache()->get($key . '_lockout', 0);
+            if (time() < $lockoutTime) {
+                $remainingTime = $lockoutTime - time();
+                return back()->withErrors([
+                    'email' => "Too many login attempts. Please try again in " . ceil($remainingTime / 60) . " minutes.",
+                ])->onlyInput('email');
+            } else {
+                // Reset attempts after lockout period
+                cache()->forget($key);
+                cache()->forget($key . '_lockout');
+            }
+        }
+
+        // Validasi input dengan sanitasi
+        $validated = $request->validate([
+            'email' => [
+                'required',
+                'email',
+                'max:255',
+                'regex:/^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/'
+            ],
+            'password' => [
+                'required',
+                'string',
+                'min:6',
+                'max:255'
+            ],
+        ], [
+            'email.required' => 'Email is required',
+            'email.email' => 'Please enter a valid email address',
+            'email.regex' => 'Please enter a valid email address',
+            'password.required' => 'Password is required',
+            'password.min' => 'Password must be at least 6 characters',
         ]);
 
-        // Check using MD5
-        $admin = DB::table('accounts')
-            ->where('email', $request->email)
-            ->where('password', md5($request->password))
-            ->first();
+        // Sanitasi input untuk mencegah XSS dan injection
+        $email = filter_var(trim($validated['email']), FILTER_SANITIZE_EMAIL);
+        $password = trim($validated['password']);
 
-        if ($admin) {
-            // Update the password to Bcrypt
-            DB::table('accounts')
-                ->where('id', $admin->id)
-                ->update(['password' => Hash::make($request->password)]);
+        // Validasi tambahan untuk email
+        if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            $this->incrementLoginAttempts($key);
+            return back()->withErrors([
+                'email' => 'Please enter a valid email address',
+            ])->onlyInput('email');
+        }
 
-            // Log the user in
-            Auth::guard('admin')->loginUsingId($admin->id);
-            $request->session()->regenerate();
+        // Cek panjang maksimum untuk mencegah buffer overflow
+        if (strlen($email) > 255 || strlen($password) > 255) {
+            $this->incrementLoginAttempts($key);
+            return back()->withErrors([
+                'email' => 'Input too long',
+            ])->onlyInput('email');
+        }
+
+        try {
+            // Check using MD5 (legacy support)
+            $admin = DB::table('accounts')
+                ->where('email', $email)
+                ->where('password', md5($password))
+                ->first();
+
+            if ($admin) {
+                // Update the password to Bcrypt
+                DB::table('accounts')
+                    ->where('id', $admin->id)
+                    ->update(['password' => Hash::make($password)]);
+
+                // Log the user in
+                Auth::guard('admin')->loginUsingId($admin->id);
+                $request->session()->regenerate();
+                
+                // Reset login attempts on successful login
+                cache()->forget($key);
+                cache()->forget($key . '_lockout');
+                
+                // Log successful login
+                \Log::info('Admin login successful', [
+                    'email' => $email,
+                    'ip' => $request->ip(),
+                    'user_agent' => $request->userAgent()
+                ]);
+                
+                return redirect()->intended('/visitor-list');
+            }
+
+            // If MD5 fails, try with Bcrypt (for already upgraded passwords)
+            if (Auth::guard('admin')->attempt([
+                'email' => $email,
+                'password' => $password
+            ])) {
+                $request->session()->regenerate();
+                
+                // Reset login attempts on successful login
+                cache()->forget($key);
+                cache()->forget($key . '_lockout');
+                
+                // Log successful login
+                \Log::info('Admin login successful', [
+                    'email' => $email,
+                    'ip' => $request->ip(),
+                    'user_agent' => $request->userAgent()
+                ]);
+                
+                return redirect()->intended('/visitor-list');
+            }
+
+            // Increment failed login attempts
+            $this->incrementLoginAttempts($key);
             
-            return redirect()->intended('/visitor-list');
-        }
+            // Log failed login attempt
+            \Log::warning('Failed admin login attempt', [
+                'email' => $email,
+                'ip' => $request->ip(),
+                'user_agent' => $request->userAgent()
+            ]);
 
-        // If MD5 fails, try with Bcrypt (for already upgraded passwords)
-        if (Auth::guard('admin')->attempt([
-            'email' => $request->email,
-            'password' => $request->password
-        ])) {
-            $request->session()->regenerate();
-            return redirect()->intended('/visitor-list');
-        }
+            return back()->withErrors([
+                'email' => 'Email or password is incorrect',
+            ])->onlyInput('email');
 
-        return back()->withErrors([
-            'email' => 'Email atau password salah',
-        ])->onlyInput('email');
+        } catch (\Exception $e) {
+            // Log error but don't expose details to user
+            \Log::error('Login error', [
+                'error' => $e->getMessage(),
+                'ip' => $request->ip()
+            ]);
+            
+            return back()->withErrors([
+                'email' => 'An error occurred. Please try again.',
+            ])->onlyInput('email');
+        }
+    }
+
+    /**
+     * Increment login attempts and set lockout if needed
+     */
+    private function incrementLoginAttempts($key)
+    {
+        $attempts = cache()->get($key, 0) + 1;
+        cache()->put($key, $attempts, 300); // 5 minutes
+        
+        if ($attempts >= 5) {
+            cache()->put($key . '_lockout', time() + 900, 900); // 15 minutes lockout
+        }
     }
 
     public function logout(Request $request)
