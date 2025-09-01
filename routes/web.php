@@ -38,4 +38,5 @@ Route::middleware(['admin.auth'])->group(function () {
     Route::get('/visitors/{id}/approve', [VisitorController::class, 'approve'])->name('visitors.approve');
     Route::get('/visitors/{id}/reject', [VisitorController::class, 'reject'])->name('visitors.reject');
     Route::post('/visitors/{id}/status', [VisitorController::class, 'updateStatus'])->name('visitors.updateStatus');
+    Route::post('/change-password', [VisitorController::class, 'changePassword'])->name('change.password');
 });
