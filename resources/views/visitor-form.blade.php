@@ -117,6 +117,12 @@
                 </div>
             @endif
 
+            @if(session('error'))
+                <div class="mb-4 p-4 bg-red-100 text-red-700 rounded">
+                    {{ session('error') }}
+                </div>
+            @endif
+
             <form id="visitorForm" action="{{ route('visitor.store') }}" method="POST" enctype="multipart/form-data" onsubmit="return validateForm()">
                 @csrf
                 <div class="relative mb-4">
@@ -232,10 +238,11 @@
                         type="file"
                         name="id_card_photo"
                         id="id_card_photo"
-                        accept="image/*"
+                        accept="image/jpeg,image/jpg,image/png"
                         class="peer custom-file-input w-full border rounded px-3 py-4 pt-6 text-base bg-transparent placeholder-transparent focus:border-black focus:ring-0 @error('id_card_photo') border-red-500 @enderror"
                         placeholder="ID Card Photo"
                         required
+                        data-max-size="2097152"
                     >
                     <label
                         for="id_card_photo"
@@ -263,10 +270,11 @@
                         type="file"
                         name="self_photo"
                         id="self_photo"
-                        accept="image/*"
+                        accept="image/jpeg,image/jpg,image/png"
                         class="peer custom-file-input w-full border rounded px-3 py-4 pt-6 text-base bg-transparent placeholder-transparent focus:border-black focus:ring-0 @error('self_photo') border-red-500 @enderror"
                         placeholder="Self Photo"
                         required
+                        data-max-size="2097152"
                     >
                     <label
                         for="self_photo"
@@ -977,17 +985,41 @@
                 updateFileInput(input);
             });
             
-            // Add image preview functionality
-            const idCardInput = document.getElementById('id_card_photo');
-            const selfPhotoInput = document.getElementById('self_photo');
-            
-            if (idCardInput) {
-                idCardInput.addEventListener('change', (e) => previewImage(e, 'id_card_preview'));
-            }
-            
-            if (selfPhotoInput) {
-                selfPhotoInput.addEventListener('change', (e) => previewImage(e, 'self_photo_preview'));
-            }
+                    // Add image preview functionality with subtle validation
+        const idCardInput = document.getElementById('id_card_photo');
+        const selfPhotoInput = document.getElementById('self_photo');
+        
+        if (idCardInput) {
+            idCardInput.addEventListener('change', (e) => {
+                const file = e.target.files[0];
+                if (file) {
+                    // Subtle validation without blocking flow
+                    if (file.size > 2 * 1024 * 1024) {
+                        console.warn('File size exceeds 2MB limit');
+                    }
+                    if (!['image/jpeg', 'image/jpg', 'image/png'].includes(file.type)) {
+                        console.warn('Invalid file type detected');
+                    }
+                }
+                previewImage(e, 'id_card_preview');
+            });
+        }
+        
+        if (selfPhotoInput) {
+            selfPhotoInput.addEventListener('change', (e) => {
+                const file = e.target.files[0];
+                if (file) {
+                    // Subtle validation without blocking flow
+                    if (file.size > 2 * 1024 * 1024) {
+                        console.warn('File size exceeds 2MB limit');
+                    }
+                    if (!['image/jpeg', 'image/jpg', 'image/png'].includes(file.type)) {
+                        console.warn('Invalid file type detected');
+                    }
+                }
+                previewImage(e, 'self_photo_preview');
+            });
+        }
         });
     </script>
 </body>

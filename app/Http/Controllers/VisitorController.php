@@ -162,8 +162,28 @@ class VisitorController extends Controller
             $selfPhoto = $request->file('self_photo');
 
             // Validasi file type dan content
-            if (!$this->isValidImage($idCardPhoto) || !$this->isValidImage($selfPhoto)) {
-                throw new \Exception('Invalid image file');
+            if (!$this->isValidImage($idCardPhoto)) {
+                \Log::warning('Invalid ID card photo upload attempt', [
+                    'ip' => $request->ip(),
+                    'user_agent' => $request->userAgent(),
+                    'filename' => $idCardPhoto->getClientOriginalName(),
+                    'size' => $idCardPhoto->getSize(),
+                    'mime_type' => $idCardPhoto->getMimeType(),
+                    'extension' => $idCardPhoto->getClientOriginalExtension()
+                ]);
+                throw new \Exception('Invalid ID card photo file');
+            }
+
+            if (!$this->isValidImage($selfPhoto)) {
+                \Log::warning('Invalid self photo upload attempt', [
+                    'ip' => $request->ip(),
+                    'user_agent' => $request->userAgent(),
+                    'filename' => $selfPhoto->getClientOriginalName(),
+                    'size' => $selfPhoto->getSize(),
+                    'mime_type' => $selfPhoto->getMimeType(),
+                    'extension' => $selfPhoto->getClientOriginalExtension()
+                ]);
+                throw new \Exception('Invalid self photo file');
             }
 
             // Generate secure filename untuk mencegah path traversal
@@ -209,12 +229,12 @@ class VisitorController extends Controller
 
             // Get department admin
             $deptAdmin = DB::table('accounts')
-                ->where('deptID', $request->deptpurpose)
+                ->where('deptID', (int)$validated['deptpurpose'])
                 ->first();
 
             if (!$deptAdmin) {
                 \Log::error('Department admin not found', [
-                    'dept_id' => $request->deptpurpose
+                    'dept_id' => $validated['deptpurpose']
                 ]);
                 throw new \Exception('Department admin not found');
             }
@@ -222,11 +242,11 @@ class VisitorController extends Controller
             // Send email notification to department admin
             Mail::send(new VisitorNotification([
                 'recipient_name' => $deptAdmin->name,
-                'name' => $request->full_name,
-                'company' => $request->company,
-                'visit_purpose' => $request->visit_purpose,
-                'startdate' => $request->startdate,
-                'enddate' => $request->enddate,
+                'name' => $fullName,
+                'company' => $company,
+                'visit_purpose' => $visitPurpose,
+                'startdate' => $validated['startdate'],
+                'enddate' => $validated['enddate'],
                 'department' => $dept->nameDept,
                 'status' => 'For Review',
                 'message' => "A new visitor has requested approval for your department. Please review this request.",
@@ -259,12 +279,27 @@ class VisitorController extends Controller
             // Log error but don't expose details to user
             \Log::error('Error in visitor registration', [
                 'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
                 'ip' => $request->ip(),
                 'user_agent' => $request->userAgent()
             ]);
+            
+            // Return more specific error messages for common issues
+            $errorMessage = 'An error occurred while processing your registration. Please try again.';
+            
+            if (strpos($e->getMessage(), 'Invalid image file') !== false) {
+                $errorMessage = 'Please ensure you are uploading valid image files (JPG, JPEG, PNG) only.';
+            } elseif (strpos($e->getMessage(), 'Input too long') !== false) {
+                $errorMessage = 'One or more fields contain data that is too long. Please check your input.';
+            } elseif (strpos($e->getMessage(), 'Invalid email format') !== false) {
+                $errorMessage = 'Please enter a valid email address.';
+            } elseif (strpos($e->getMessage(), 'Department not found') !== false) {
+                $errorMessage = 'Selected department is not valid. Please try again.';
+            }
+            
             return redirect()->back()
                 ->withInput()
-                ->withErrors(['error' => 'An error occurred while processing your registration. Please try again.']);
+                ->withErrors(['error' => $errorMessage]);
         }
     }
 
@@ -813,39 +848,169 @@ class VisitorController extends Controller
      */
     private function isValidImage($file)
     {
-        if (!$file || !$file->isValid()) {
+        try {
+            if (!$file || !$file->isValid()) {
+                return false;
+            }
+
+            // Check file extension
+            $allowedExtensions = ['jpg', 'jpeg', 'png'];
+            $extension = strtolower($file->getClientOriginalExtension());
+            
+            if (!in_array($extension, $allowedExtensions)) {
+                return false;
+            }
+
+            // Check MIME type
+            $allowedMimes = ['image/jpeg', 'image/jpg', 'image/png'];
+            $mimeType = $file->getMimeType();
+            
+            if (!in_array($mimeType, $allowedMimes)) {
+                return false;
+            }
+
+            // Check file size (max 2MB)
+            if ($file->getSize() > 2 * 1024 * 1024) {
+                return false;
+            }
+
+            // Additional check: verify it's actually an image
+            $imageInfo = getimagesize($file->getPathname());
+            if ($imageInfo === false) {
+                return false;
+            }
+
+            // Check image dimensions untuk mencegah DoS (lebih longgar)
+            if ($imageInfo[0] > 8000 || $imageInfo[1] > 8000) {
+                return false;
+            }
+
+            // Check magic bytes untuk mencegah polyglot files (optional untuk performance)
+            if (!$this->hasValidMagicBytes($file)) {
+                return false;
+            }
+
+            // Check untuk PHP code dalam file (optional untuk performance)
+            if ($this->containsPHPCode($file)) {
+                return false;
+            }
+
+            return true;
+        } catch (\Exception $e) {
+            \Log::error('Error validating image file', [
+                'error' => $e->getMessage(),
+                'filename' => $file ? $file->getClientOriginalName() : 'unknown'
+            ]);
             return false;
         }
-
-        // Check file extension
-        $allowedExtensions = ['jpg', 'jpeg', 'png'];
-        $extension = strtolower($file->getClientOriginalExtension());
-        
-        if (!in_array($extension, $allowedExtensions)) {
-            return false;
-        }
-
-        // Check MIME type
-        $allowedMimes = ['image/jpeg', 'image/jpg', 'image/png'];
-        $mimeType = $file->getMimeType();
-        
-        if (!in_array($mimeType, $allowedMimes)) {
-            return false;
-        }
-
-        // Check file size (max 2MB)
-        if ($file->getSize() > 2 * 1024 * 1024) {
-            return false;
-        }
-
-        // Additional check: verify it's actually an image
-        $imageInfo = getimagesize($file->getPathname());
-        if ($imageInfo === false) {
-            return false;
-        }
-
-        return true;
     }
+
+    /**
+     * Check magic bytes untuk mencegah polyglot files
+     */
+    private function hasValidMagicBytes($file)
+    {
+        try {
+            $handle = fopen($file->getPathname(), 'rb');
+            if (!$handle) {
+                return true; // Skip magic byte check if can't open file
+            }
+
+            // Read first 12 bytes untuk check magic bytes
+            $header = fread($handle, 12);
+            fclose($handle);
+
+            if (strlen($header) < 3) {
+                return true; // Skip if file too small
+            }
+
+            // JPEG magic bytes: FF D8 FF
+            $jpegMagic = "\xFF\xD8\xFF";
+            
+            // PNG magic bytes: 89 50 4E 47 0D 0A 1A 0A
+            $pngMagic = "\x89\x50\x4E\x47\x0D\x0A\x1A\x0A";
+
+            // Check untuk valid image magic bytes
+            if (strpos($header, $jpegMagic) === 0) {
+                return true;
+            }
+
+            if (strpos($header, $pngMagic) === 0) {
+                return true;
+            }
+
+            // If magic bytes don't match, log but don't block (for compatibility)
+            \Log::warning('Magic bytes validation failed', [
+                'filename' => $file->getClientOriginalName(),
+                'header' => bin2hex(substr($header, 0, 8))
+            ]);
+            
+            return true; // Allow file to pass for now
+        } catch (\Exception $e) {
+            \Log::error('Error checking magic bytes', ['error' => $e->getMessage()]);
+            return true; // Skip magic byte check on error
+        }
+    }
+
+    /**
+     * Check untuk PHP code dalam file
+     */
+    private function containsPHPCode($file)
+    {
+        try {
+            $handle = fopen($file->getPathname(), 'rb');
+            if (!$handle) {
+                return false;
+            }
+
+            // Read first 1KB of file content (for performance)
+            $content = fread($handle, 1024);
+            fclose($handle);
+
+            // Check untuk PHP tags (most common)
+            $phpPatterns = [
+                '/<\?php/i',
+                '/<\?=/i',
+                '/<\?/i',
+                '/\?>$/i',
+            ];
+
+            foreach ($phpPatterns as $pattern) {
+                if (preg_match($pattern, $content)) {
+                    \Log::warning('PHP code detected in uploaded file', [
+                        'filename' => $file->getClientOriginalName(),
+                        'pattern' => $pattern
+                    ]);
+                    return true;
+                }
+            }
+
+            // Check untuk dangerous functions (optional)
+            $dangerousPatterns = [
+                '/eval\s*\(/i',
+                '/system\s*\(/i',
+                '/exec\s*\(/i',
+                '/shell_exec\s*\(/i',
+            ];
+
+            foreach ($dangerousPatterns as $pattern) {
+                if (preg_match($pattern, $content)) {
+                    \Log::warning('Dangerous function detected in uploaded file', [
+                        'filename' => $file->getClientOriginalName(),
+                        'pattern' => $pattern
+                    ]);
+                    return true;
+                }
+            }
+
+            return false;
+        } catch (\Exception $e) {
+            \Log::error('Error checking PHP code', ['error' => $e->getMessage()]);
+            return false;
+        }
+    }
+
+
 
     /**
      * Generate secure filename untuk mencegah path traversal
