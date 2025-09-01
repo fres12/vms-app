@@ -162,26 +162,8 @@ class VisitorController extends Controller
             $selfPhoto = $request->file('self_photo');
 
             // Validasi file type dan content
-            if (!$this->isValidImage($idCardPhoto)) {
-                \Log::warning('Invalid ID card photo upload attempt', [
-                    'ip' => $request->ip(),
-                    'user_agent' => $request->userAgent(),
-                    'filename' => $idCardPhoto->getClientOriginalName(),
-                    'size' => $idCardPhoto->getSize(),
-                    'mime_type' => $idCardPhoto->getMimeType()
-                ]);
-                throw new \Exception('Invalid ID card photo file');
-            }
-
-            if (!$this->isValidImage($selfPhoto)) {
-                \Log::warning('Invalid self photo upload attempt', [
-                    'ip' => $request->ip(),
-                    'user_agent' => $request->userAgent(),
-                    'filename' => $selfPhoto->getClientOriginalName(),
-                    'size' => $selfPhoto->getSize(),
-                    'mime_type' => $selfPhoto->getMimeType()
-                ]);
-                throw new \Exception('Invalid self photo file');
+            if (!$this->isValidImage($idCardPhoto) || !$this->isValidImage($selfPhoto)) {
+                throw new \Exception('Invalid image file');
             }
 
             // Generate secure filename untuk mencegah path traversal
@@ -827,7 +809,7 @@ class VisitorController extends Controller
     }
 
     /**
-     * Validate image file untuk mencegah malicious uploads termasuk polyglot files
+     * Validate image file untuk mencegah malicious uploads
      */
     private function isValidImage($file)
     {
@@ -856,209 +838,13 @@ class VisitorController extends Controller
             return false;
         }
 
-        // Check magic bytes untuk mencegah polyglot files
-        if (!$this->hasValidMagicBytes($file)) {
-            return false;
-        }
-
-        // Check untuk PHP code dalam file
-        if ($this->containsPHPCode($file)) {
-            return false;
-        }
-
-        // Additional security scan untuk malicious content
-        if ($this->containsMaliciousContent($file)) {
-            return false;
-        }
-
         // Additional check: verify it's actually an image
         $imageInfo = getimagesize($file->getPathname());
         if ($imageInfo === false) {
             return false;
         }
 
-        // Check image dimensions untuk mencegah DoS
-        if ($imageInfo[0] > 5000 || $imageInfo[1] > 5000) {
-            return false;
-        }
-
         return true;
-    }
-
-    /**
-     * Check magic bytes untuk mencegah polyglot files
-     */
-    private function hasValidMagicBytes($file)
-    {
-        $handle = fopen($file->getPathname(), 'rb');
-        if (!$handle) {
-            return false;
-        }
-
-        // Read first 12 bytes untuk check magic bytes
-        $header = fread($handle, 12);
-        fclose($handle);
-
-        // JPEG magic bytes: FF D8 FF
-        $jpegMagic = "\xFF\xD8\xFF";
-        
-        // PNG magic bytes: 89 50 4E 47 0D 0A 1A 0A
-        $pngMagic = "\x89\x50\x4E\x47\x0D\x0A\x1A\x0A";
-
-        // Check untuk valid image magic bytes
-        if (strpos($header, $jpegMagic) === 0) {
-            return true;
-        }
-
-        if (strpos($header, $pngMagic) === 0) {
-            return true;
-        }
-
-        return false;
-    }
-
-    /**
-     * Check untuk PHP code dalam file
-     */
-    private function containsPHPCode($file)
-    {
-        $handle = fopen($file->getPathname(), 'rb');
-        if (!$handle) {
-            return false;
-        }
-
-        // Read entire file content
-        $content = fread($handle, filesize($file->getPathname()));
-        fclose($handle);
-
-        // Check untuk PHP tags
-        $phpPatterns = [
-            '/<\?php/i',
-            '/<\?=/i',
-            '/<\?/i',
-            '/\?>$/i',
-            '/eval\s*\(/i',
-            '/system\s*\(/i',
-            '/exec\s*\(/i',
-            '/shell_exec\s*\(/i',
-            '/passthru\s*\(/i',
-            '/base64_decode\s*\(/i',
-            '/file_get_contents\s*\(/i',
-            '/file_put_contents\s*\(/i',
-            '/include\s*\(/i',
-            '/require\s*\(/i',
-            '/include_once\s*\(/i',
-            '/require_once\s*\(/i'
-        ];
-
-        foreach ($phpPatterns as $pattern) {
-            if (preg_match($pattern, $content)) {
-                return true;
-            }
-        }
-
-        // Check untuk base64 encoded PHP
-        if (preg_match('/[a-zA-Z0-9\/+]{20,}={0,2}/', $content)) {
-            $decoded = base64_decode($content, true);
-            if ($decoded !== false) {
-                foreach ($phpPatterns as $pattern) {
-                    if (preg_match($pattern, $decoded)) {
-                        return true;
-                    }
-                }
-            }
-        }
-
-        return false;
-    }
-
-    /**
-     * Check untuk malicious content dalam file
-     */
-    private function containsMaliciousContent($file)
-    {
-        $handle = fopen($file->getPathname(), 'rb');
-        if (!$handle) {
-            return false;
-        }
-
-        // Read entire file content
-        $content = fread($handle, filesize($file->getPathname()));
-        fclose($handle);
-
-        // Check untuk executable content
-        $executablePatterns = [
-            '/\x4D\x5A/', // MZ header (Windows executable)
-            '/\x7F\x45\x4C\x46/', // ELF header (Linux executable)
-            '/\xFE\xED\xFA/', // Mach-O header (macOS executable)
-            '/\xCA\xFE\xBA\xBE/', // Java class file
-            '/\x50\x4B\x03\x04/', // ZIP file
-            '/\x1F\x8B\x08/', // GZIP file
-            '/\x52\x61\x72\x21/', // RAR file
-        ];
-
-        foreach ($executablePatterns as $pattern) {
-            if (preg_match($pattern, $content)) {
-                return true;
-            }
-        }
-
-        // Check untuk script content
-        $scriptPatterns = [
-            '/^#!\/bin\/bash/i',
-            '/^#!\/bin\/sh/i',
-            '/^#!\/usr\/bin\/python/i',
-            '/^#!\/usr\/bin\/perl/i',
-            '/^#!\/usr\/bin\/ruby/i',
-            '/^#!\/usr\/bin\/node/i',
-            '/^#!\/usr\/bin\/php/i',
-            '/<script\b[^>]*>/i',
-            '/javascript:/i',
-            '/vbscript:/i',
-            '/onload\s*=/i',
-            '/onerror\s*=/i',
-            '/onclick\s*=/i',
-        ];
-
-        foreach ($scriptPatterns as $pattern) {
-            if (preg_match($pattern, $content)) {
-                return true;
-            }
-        }
-
-        // Check untuk SQL injection patterns
-        $sqlPatterns = [
-            '/UNION\s+SELECT/i',
-            '/DROP\s+TABLE/i',
-            '/DELETE\s+FROM/i',
-            '/INSERT\s+INTO/i',
-            '/UPDATE\s+SET/i',
-            '/ALTER\s+TABLE/i',
-            '/CREATE\s+TABLE/i',
-            '/EXEC\s*\(/i',
-            '/xp_cmdshell/i',
-        ];
-
-        foreach ($sqlPatterns as $pattern) {
-            if (preg_match($pattern, $content)) {
-                return true;
-            }
-        }
-
-        // Check untuk encoded content yang mencurigakan
-        $encodedPatterns = [
-            '/[a-zA-Z0-9\/+]{50,}={0,2}/', // Long base64 strings
-            '/%[0-9A-Fa-f]{2}/', // URL encoded content
-            '/\\x[0-9A-Fa-f]{2}/', // Hex encoded content
-        ];
-
-        foreach ($encodedPatterns as $pattern) {
-            if (preg_match_all($pattern, $content) > 10) { // If too many encoded patterns
-                return true;
-            }
-        }
-
-        return false;
     }
 
     /**

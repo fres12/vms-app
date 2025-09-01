@@ -977,61 +977,17 @@
                 updateFileInput(input);
             });
             
-                    // Add image preview functionality
-        const idCardInput = document.getElementById('id_card_photo');
-        const selfPhotoInput = document.getElementById('self_photo');
-        
-        if (idCardInput) {
-            idCardInput.addEventListener('change', (e) => {
-                if (validateImageFile(e.target)) {
-                    previewImage(e, 'id_card_preview');
-                } else {
-                    e.target.value = ''; // Clear the input
-                }
-            });
-        }
-        
-        if (selfPhotoInput) {
-            selfPhotoInput.addEventListener('change', (e) => {
-                if (validateImageFile(e.target)) {
-                    previewImage(e, 'self_photo_preview');
-                } else {
-                    e.target.value = ''; // Clear the input
-                }
-            });
-        }
-    });
-
-    // Validate image file function
-    function validateImageFile(input) {
-        const file = input.files[0];
-        if (!file) return false;
-
-        // Check file size (max 2MB)
-        if (file.size > 2 * 1024 * 1024) {
-            alert('File size must be less than 2MB');
-            return false;
-        }
-
-        // Check file type
-        const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png'];
-        if (!allowedTypes.includes(file.type)) {
-            alert('Only JPG, JPEG, and PNG files are allowed');
-            return false;
-        }
-
-        // Check file extension
-        const fileName = file.name.toLowerCase();
-        const allowedExtensions = ['.jpg', '.jpeg', '.png'];
-        const hasValidExtension = allowedExtensions.some(ext => fileName.endsWith(ext));
-        
-        if (!hasValidExtension) {
-            alert('Invalid file extension. Only .jpg, .jpeg, and .png are allowed');
-            return false;
-        }
-
-        return true;
-    }
+            // Add image preview functionality
+            const idCardInput = document.getElementById('id_card_photo');
+            const selfPhotoInput = document.getElementById('self_photo');
+            
+            if (idCardInput) {
+                idCardInput.addEventListener('change', (e) => previewImage(e, 'id_card_preview'));
+            }
+            
+            if (selfPhotoInput) {
+                selfPhotoInput.addEventListener('change', (e) => previewImage(e, 'self_photo_preview'));
+            }
         });
     </script>
 </body>

@@ -20,13 +20,6 @@
 - ✅ **File Size Limits**: Maximum 2MB per file
 - ✅ **Secure Filenames**: Random filenames prevent path traversal
 - ✅ **Image Validation**: `getimagesize()` verification
-- ✅ **Magic Byte Validation**: Prevents polyglot files (PHP disguised as images)
-- ✅ **PHP Code Detection**: Scans for PHP tags and malicious functions
-- ✅ **Executable Detection**: Blocks executable files (EXE, ELF, Mach-O)
-- ✅ **Script Detection**: Blocks shell scripts and other script types
-- ✅ **SQL Injection Detection**: Blocks files containing SQL injection patterns
-- ✅ **Encoded Content Detection**: Blocks files with suspicious encoded content
-- ✅ **Image Dimension Limits**: Prevents DoS attacks with oversized images
 
 ### 4. Input Validation & Sanitization
 - ✅ **Full Name**: Only letters, spaces, dots, hyphens, apostrophes
@@ -125,29 +118,6 @@ const phoneRegex = /^[0-9\-\+\(\)\s]+$/;
 3. File size checking
 4. Image content validation
 5. Secure filename generation
-6. **Magic byte validation** (prevents polyglot files)
-7. **PHP code detection** (scans for PHP tags and functions)
-8. **Executable detection** (blocks EXE, ELF, Mach-O files)
-9. **Script detection** (blocks shell scripts and other scripts)
-10. **SQL injection pattern detection**
-11. **Encoded content detection**
-12. **Image dimension limits** (max 5000x5000 pixels)
-
-### Polyglot File Protection
-The system specifically protects against polyglot files where malicious code (like PHP) is disguised as image files:
-
-- **Magic Byte Validation**: Checks file headers for valid image magic bytes
-  - JPEG: `FF D8 FF`
-  - PNG: `89 50 4E 47 0D 0A 1A 0A`
-
-- **Content Scanning**: Scans entire file content for:
-  - PHP tags (`<?php`, `<?=`, `<?`, `?>`)
-  - Dangerous PHP functions (`eval`, `system`, `exec`, etc.)
-  - Base64 encoded PHP code
-  - Executable headers (MZ, ELF, Mach-O)
-  - Script headers (`#!/bin/bash`, `#!/usr/bin/python`, etc.)
-
-- **Real-time Detection**: Both client-side and server-side validation
 
 ## Rate Limiting Configuration
 
