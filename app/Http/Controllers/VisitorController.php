@@ -1046,56 +1046,69 @@ class VisitorController extends Controller
         return redirect()->route('login');
     }
 
-    public function changePassword(Request $request)
+    public function changePassword(Request $request) 
     {
-        $request->validate([
-            'current_password' => 'required|string',
-            'new_password' => 'required|string|min:6|max:255',
-            'confirm_password' => 'required|string|same:new_password',
-        ], [
-            'current_password.required' => 'Current password is required',
-            'new_password.required' => 'New password is required',
-            'new_password.min' => 'New password must be at least 6 characters',
-            'confirm_password.required' => 'Please confirm your new password',
-            'confirm_password.same' => 'Password confirmation does not match',
-        ]);
-
-        $admin = Auth::guard('admin')->user();
-        
-        // Check current password (support both MD5 and Bcrypt)
-        $currentPasswordValid = false;
-        
-        // Try MD5 first (legacy support)
-        if (DB::table('accounts')->where('id', $admin->id)->where('password', md5($request->current_password))->exists()) {
-            $currentPasswordValid = true;
-        }
-        // Try Bcrypt
-        elseif (Hash::check($request->current_password, $admin->password)) {
-            $currentPasswordValid = true;
-        }
-
-        if (!$currentPasswordValid) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Current password is incorrect'
-            ], 400);
-        }
-
         try {
-            // Update password with MD5 (as requested)
-            DB::table('accounts')
+            $admin = Auth::guard('admin')->user();
+            $currentPasswordValid = false;
+
+            // First try MD5 check
+            $md5Match = DB::table('accounts')
                 ->where('id', $admin->id)
-                ->update(['password' => md5($request->new_password)]);
+                ->where('password', md5($request->current_password))
+                ->exists();
+
+            if ($md5Match) {
+                $currentPasswordValid = true;
+            }
+            // If MD5 fails, try bcrypt
+            elseif (Hash::check($request->current_password, $admin->password)) {
+                $currentPasswordValid = true;
+            }
+
+            if (!$currentPasswordValid) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Wrong current password'
+                ]);
+            }
+
+            // Validate new password match
+            if ($request->new_password !== $request->new_password_confirmation) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'New password and confirmation do not match'
+                ]);
+            }
+
+            // Update with new MD5 hashed password
+            $updated = DB::table('accounts')
+                ->where('id', $admin->id)
+                ->update([
+                    'password' => md5($request->new_password)
+                ]);
+
+            if (!$updated) {
+                throw new \Exception('Failed to update password');
+            }
+
+            Auth::guard('admin')->logout();
 
             return response()->json([
                 'success' => true,
                 'message' => 'Password changed successfully'
             ]);
+
         } catch (\Exception $e) {
+            \Log::error('Password change error:', [
+                'error' => $e->getMessage(),
+                'user_id' => $admin->id ?? null
+            ]);
+            
             return response()->json([
                 'success' => false,
                 'message' => 'An error occurred while changing password'
-            ], 500);
+            ]);
         }
     }
 }
