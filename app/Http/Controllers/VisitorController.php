@@ -19,56 +19,187 @@ class VisitorController extends Controller
 {
     public function store(Request $request)
     {
-        $request->validate([
-            'full_name' => 'required|string',
-            'email' => 'required|email',
-            'nik' => 'required|string',
-            'id_card_photo' => 'required|image|mimes:jpeg,png,jpg|max:2048',
-            'self_photo' => 'required|image|mimes:jpeg,png,jpg|max:2048',
-            'company' => 'nullable|string',
-            'phone' => 'nullable|string',
-            'deptpurpose' => 'required|exists:depts,deptID',
-            'visit_purpose' => 'required|string',
-            'startdate' => 'required|date',
-            'enddate' => 'required|date|after:startdate',
-            'equipment_type' => 'nullable|string',
-            'brand' => 'nullable|string',
-            'pledge_agreement' => 'required|accepted'
+        // Rate limiting untuk mencegah spam submission
+        $key = 'visitor_form_' . $request->ip();
+        $attempts = cache()->get($key, 0);
+        
+        if ($attempts >= 3) {
+            $lockoutTime = cache()->get($key . '_lockout', 0);
+            if (time() < $lockoutTime) {
+                $remainingTime = $lockoutTime - time();
+                return back()->withErrors([
+                    'general' => "Too many form submissions. Please try again in " . ceil($remainingTime / 60) . " minutes.",
+                ])->withInput();
+            } else {
+                cache()->forget($key);
+                cache()->forget($key . '_lockout');
+            }
+        }
+
+        // Enhanced validation dengan sanitasi
+        $validated = $request->validate([
+            'full_name' => [
+                'required',
+                'string',
+                'max:255',
+                'regex:/^[a-zA-Z\s\.\-\']+$/'
+            ],
+            'email' => [
+                'required',
+                'email',
+                'max:255',
+                'regex:/^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/'
+            ],
+            'nik' => [
+                'required',
+                'string',
+                'max:16',
+                'regex:/^[0-9]+$/'
+            ],
+            'id_card_photo' => [
+                'required',
+                'image',
+                'mimes:jpeg,png,jpg',
+                'max:2048'
+            ],
+            'self_photo' => [
+                'required',
+                'image',
+                'mimes:jpeg,png,jpg',
+                'max:2048'
+            ],
+            'company' => [
+                'nullable',
+                'string',
+                'max:255',
+                'regex:/^[a-zA-Z0-9\s\.\-\&\,]+$/'
+            ],
+            'phone' => [
+                'nullable',
+                'string',
+                'max:20',
+                'regex:/^[0-9\-\+\(\)\s]+$/'
+            ],
+            'deptpurpose' => [
+                'required',
+                'integer',
+                'exists:depts,deptID'
+            ],
+            'visit_purpose' => [
+                'required',
+                'string',
+                'max:500',
+                'regex:/^[a-zA-Z0-9\s\.\-\,\!\?]+$/'
+            ],
+            'startdate' => [
+                'required',
+                'date',
+                'after:now'
+            ],
+            'enddate' => [
+                'required',
+                'date',
+                'after:startdate'
+            ],
+            'equipment_type' => [
+                'nullable',
+                'string',
+                'max:255',
+                'regex:/^[a-zA-Z0-9\s\.\-\&\,]+$/'
+            ],
+            'brand' => [
+                'nullable',
+                'string',
+                'max:255',
+                'regex:/^[a-zA-Z0-9\s\.\-\&\,]+$/'
+            ],
+            'pledge_agreement' => [
+                'required',
+                'accepted'
+            ]
+        ], [
+            'full_name.required' => 'Full name is required',
+            'full_name.regex' => 'Full name contains invalid characters',
+            'email.required' => 'Email is required',
+            'email.email' => 'Please enter a valid email address',
+            'email.regex' => 'Please enter a valid email address',
+            'nik.required' => 'NIK is required',
+            'nik.regex' => 'NIK must contain only numbers',
+            'company.regex' => 'Company name contains invalid characters',
+            'phone.regex' => 'Phone number contains invalid characters',
+            'visit_purpose.regex' => 'Visit purpose contains invalid characters',
+            'equipment_type.regex' => 'Equipment type contains invalid characters',
+            'brand.regex' => 'Brand contains invalid characters',
+            'startdate.after' => 'Start date must be in the future',
+            'enddate.after' => 'End date must be after start date',
         ]);
 
         try {
             DB::beginTransaction();
 
+            // Sanitasi input untuk mencegah XSS dan injection
+            $fullName = $this->sanitizeInput($validated['full_name']);
+            $email = filter_var(trim($validated['email']), FILTER_SANITIZE_EMAIL);
+            $nik = $this->sanitizeInput($validated['nik']);
+            $company = $validated['company'] ? $this->sanitizeInput($validated['company']) : null;
+            $phone = $validated['phone'] ? $this->sanitizeInput($validated['phone']) : null;
+            $visitPurpose = $this->sanitizeInput($validated['visit_purpose']);
+            $equipmentType = $validated['equipment_type'] ? $this->sanitizeInput($validated['equipment_type']) : null;
+            $brand = $validated['brand'] ? $this->sanitizeInput($validated['brand']) : null;
+
+            // Validasi tambahan untuk email
+            if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+                throw new \Exception('Invalid email format');
+            }
+
+            // Validasi panjang input untuk mencegah buffer overflow
+            if (strlen($fullName) > 255 || strlen($email) > 255 || strlen($nik) > 16) {
+                throw new \Exception('Input too long');
+            }
+
+            // Validasi file upload security
+            $idCardPhoto = $request->file('id_card_photo');
+            $selfPhoto = $request->file('self_photo');
+
+            // Validasi file type dan content
+            if (!$this->isValidImage($idCardPhoto) || !$this->isValidImage($selfPhoto)) {
+                throw new \Exception('Invalid image file');
+            }
+
+            // Generate secure filename untuk mencegah path traversal
+            $idCardPhotoPath = $this->generateSecureFilename($idCardPhoto, 'id_cards');
+            $selfPhotoPath = $this->generateSecureFilename($selfPhoto, 'self_photos');
+
             // Handle ID Card Photo Upload
-            $idCardPhotoPath = $request->file('id_card_photo')->store('id_cards', 'public');
+            $idCardPhotoPath = $idCardPhoto->storeAs('id_cards', $idCardPhotoPath, 'public');
             
             // Handle Self Photo Upload
-            $selfPhotoPath = $request->file('self_photo')->store('self_photos', 'public');
+            $selfPhotoPath = $selfPhoto->storeAs('self_photos', $selfPhotoPath, 'public');
 
-            // Get department info
+            // Get department info dengan validasi
             $dept = DB::table('depts')
-                ->where('deptID', $request->deptpurpose)
+                ->where('deptID', (int)$validated['deptpurpose'])
                 ->first();
 
             if (!$dept) {
                 throw new \Exception('Department not found');
             }
 
-            // Insert into database
+            // Insert into database dengan data yang sudah disanitasi
             $visitorId = DB::table('visitors')->insertGetId([
-                'fullname' => $request->full_name,
-                'email' => $request->email,
-                'nik' => $request->nik,
+                'fullname' => $fullName,
+                'email' => $email,
+                'nik' => $nik,
                 'idcardphoto' => $idCardPhotoPath,
                 'selfphoto' => $selfPhotoPath,
-                'company' => $request->company,
-                'phone' => $request->phone,
-                'deptpurpose' => $request->deptpurpose,
-                'visit_purpose' => $request->visit_purpose,
-                'startdate' => $request->startdate,
-                'enddate' => $request->enddate,
-                'equipment_type' => $request->equipment_type,
-                'brand' => $request->brand,
+                'company' => $company,
+                'phone' => $phone,
+                'deptpurpose' => (int)$validated['deptpurpose'],
+                'visit_purpose' => $visitPurpose,
+                'startdate' => $validated['startdate'],
+                'enddate' => $validated['enddate'],
+                'equipment_type' => $equipmentType,
+                'brand' => $brand,
                 'status' => 'For Review',
                 'submit_date' => now(),
                 'approved_date' => null,
@@ -104,18 +235,32 @@ class VisitorController extends Controller
 
             DB::commit();
 
+            // Reset form submission attempts on successful submission
+            cache()->forget($key);
+            cache()->forget($key . '_lockout');
+
+            // Log successful registration
             \Log::info('Visitor registration successful', [
                 'visitor_id' => $visitorId,
-                'dept_admin_email' => $deptAdmin->email
+                'email' => $email,
+                'dept_admin_email' => $deptAdmin->email,
+                'ip' => $request->ip(),
+                'user_agent' => $request->userAgent()
             ]);
 
             return redirect()->back()->with('success', 'Your visitor registration has been submitted successfully. Please wait for approval.');
 
         } catch (\Exception $e) {
             DB::rollBack();
+            
+            // Increment form submission attempts on error
+            $this->incrementFormAttempts($key);
+            
+            // Log error but don't expose details to user
             \Log::error('Error in visitor registration', [
                 'error' => $e->getMessage(),
-                'trace' => $e->getTraceAsString()
+                'ip' => $request->ip(),
+                'user_agent' => $request->userAgent()
             ]);
             return redirect()->back()
                 ->withInput()
@@ -642,6 +787,88 @@ class VisitorController extends Controller
         
         if ($attempts >= 5) {
             cache()->put($key . '_lockout', time() + 900, 900); // 15 minutes lockout
+        }
+    }
+
+    /**
+     * Sanitize input untuk mencegah XSS dan injection
+     */
+    private function sanitizeInput($input)
+    {
+        if (is_string($input)) {
+            // Remove HTML tags
+            $input = strip_tags($input);
+            // Convert special characters
+            $input = htmlspecialchars($input, ENT_QUOTES, 'UTF-8');
+            // Trim whitespace
+            $input = trim($input);
+            // Remove null bytes
+            $input = str_replace(chr(0), '', $input);
+        }
+        return $input;
+    }
+
+    /**
+     * Validate image file untuk mencegah malicious uploads
+     */
+    private function isValidImage($file)
+    {
+        if (!$file || !$file->isValid()) {
+            return false;
+        }
+
+        // Check file extension
+        $allowedExtensions = ['jpg', 'jpeg', 'png'];
+        $extension = strtolower($file->getClientOriginalExtension());
+        
+        if (!in_array($extension, $allowedExtensions)) {
+            return false;
+        }
+
+        // Check MIME type
+        $allowedMimes = ['image/jpeg', 'image/jpg', 'image/png'];
+        $mimeType = $file->getMimeType();
+        
+        if (!in_array($mimeType, $allowedMimes)) {
+            return false;
+        }
+
+        // Check file size (max 2MB)
+        if ($file->getSize() > 2 * 1024 * 1024) {
+            return false;
+        }
+
+        // Additional check: verify it's actually an image
+        $imageInfo = getimagesize($file->getPathname());
+        if ($imageInfo === false) {
+            return false;
+        }
+
+        return true;
+    }
+
+    /**
+     * Generate secure filename untuk mencegah path traversal
+     */
+    private function generateSecureFilename($file, $prefix)
+    {
+        $extension = strtolower($file->getClientOriginalExtension());
+        $timestamp = time();
+        $randomString = bin2hex(random_bytes(8));
+        
+        return $prefix . '_' . $timestamp . '_' . $randomString . '.' . $extension;
+    }
+
+    /**
+     * Increment form submission attempts
+     */
+    private function incrementFormAttempts($key)
+    {
+        $attempts = cache()->get($key, 0) + 1;
+        cache()->put($key, $attempts, 600); // 10 minutes
+        
+        if ($attempts >= 3) {
+            cache()->put($key . '_lockout', time() + 1800, 1800); // 30 minutes lockout
         }
     }
 

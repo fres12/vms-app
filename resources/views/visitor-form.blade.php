@@ -117,7 +117,7 @@
                 </div>
             @endif
 
-            <form id="visitorForm" action="{{ route('visitor.store') }}" method="POST" enctype="multipart/form-data" onsubmit="return false;">
+            <form id="visitorForm" action="{{ route('visitor.store') }}" method="POST" enctype="multipart/form-data" onsubmit="return validateForm()">
                 @csrf
                 <div class="relative mb-4">
                     <input
@@ -128,6 +128,10 @@
                         class="peer w-full border rounded px-3 py-4 pt-6 text-base bg-transparent placeholder-transparent focus:border-black focus:ring-0 @error('full_name') border-red-500 @enderror"
                         placeholder="Full Name"
                         required
+                        maxlength="255"
+                        pattern="[a-zA-Z\s\.\-\']+"
+                        title="Only letters, spaces, dots, hyphens, and apostrophes are allowed"
+                        oninput="this.value = this.value.replace(/[<>\"'&;()]/g, '')"
                     >
                     <label
                         for="full_name"
@@ -160,6 +164,10 @@
                         class="peer w-full border rounded px-3 py-4 pt-6 text-base bg-transparent placeholder-transparent focus:border-black focus:ring-0 @error('email') border-red-500 @enderror"
                         placeholder="Email"
                         required
+                        maxlength="255"
+                        pattern="[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}"
+                        title="Please enter a valid email address"
+                        oninput="this.value = this.value.replace(/[<>\"'&;()]/g, '')"
                     >
                     <label
                         for="email"
@@ -193,6 +201,9 @@
                         class="peer w-full border rounded px-3 py-4 pt-6 text-base bg-transparent placeholder-transparent focus:border-black focus:ring-0 @error('nik') border-red-500 @enderror"
                         placeholder="National ID Number (NIK)"
                         required
+                        maxlength="16"
+                        title="NIK must contain only numbers"
+                        oninput="this.value = this.value.replace(/[^0-9]/g, '')"
                     >
                     <label
                         for="nik"
@@ -594,6 +605,128 @@
     </div>
 
     <script>
+        // Form validation function
+        function validateForm() {
+            const form = document.getElementById('visitorForm');
+            
+            // Get form elements
+            const fullName = document.getElementById('full_name');
+            const email = document.getElementById('email');
+            const nik = document.getElementById('nikInput');
+            const company = document.getElementById('company');
+            const phone = document.getElementById('phoneInput');
+            const visitPurpose = document.getElementById('visit_purpose');
+            const equipmentType = document.getElementById('equipment_type');
+            const brand = document.getElementById('brand');
+            
+            // Validate full name (only letters, spaces, dots, hyphens, apostrophes)
+            const nameRegex = /^[a-zA-Z\s\.\-\']+$/;
+            if (!nameRegex.test(fullName.value.trim())) {
+                alert('Full name contains invalid characters. Only letters, spaces, dots, hyphens, and apostrophes are allowed.');
+                fullName.focus();
+                return false;
+            }
+            
+            // Validate email
+            const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
+            if (!emailRegex.test(email.value.trim())) {
+                alert('Please enter a valid email address.');
+                email.focus();
+                return false;
+            }
+            
+            // Validate NIK (only numbers)
+            const nikRegex = /^[0-9]+$/;
+            if (!nikRegex.test(nik.value.trim())) {
+                alert('NIK must contain only numbers.');
+                nik.focus();
+                return false;
+            }
+            
+            // Validate company name (if provided)
+            if (company.value.trim()) {
+                const companyRegex = /^[a-zA-Z0-9\s\.\-\&\,]+$/;
+                if (!companyRegex.test(company.value.trim())) {
+                    alert('Company name contains invalid characters.');
+                    company.focus();
+                    return false;
+                }
+            }
+            
+            // Validate phone (if provided)
+            if (phone.value.trim()) {
+                const phoneRegex = /^[0-9\-\+\(\)\s]+$/;
+                if (!phoneRegex.test(phone.value.trim())) {
+                    alert('Phone number contains invalid characters.');
+                    phone.focus();
+                    return false;
+                }
+            }
+            
+            // Validate visit purpose
+            const purposeRegex = /^[a-zA-Z0-9\s\.\-\,\!\?]+$/;
+            if (!purposeRegex.test(visitPurpose.value.trim())) {
+                alert('Visit purpose contains invalid characters.');
+                visitPurpose.focus();
+                return false;
+            }
+            
+            // Validate equipment type (if provided)
+            if (equipmentType.value.trim()) {
+                const equipmentRegex = /^[a-zA-Z0-9\s\.\-\&\,]+$/;
+                if (!equipmentRegex.test(equipmentType.value.trim())) {
+                    alert('Equipment type contains invalid characters.');
+                    equipmentType.focus();
+                    return false;
+                }
+            }
+            
+            // Validate brand (if provided)
+            if (brand.value.trim()) {
+                const brandRegex = /^[a-zA-Z0-9\s\.\-\&\,]+$/;
+                if (!brandRegex.test(brand.value.trim())) {
+                    alert('Brand contains invalid characters.');
+                    brand.focus();
+                    return false;
+                }
+            }
+            
+            // Check for dangerous characters
+            const dangerousChars = /[<>\"'&;()]/;
+            const allInputs = [fullName, email, nik, company, phone, visitPurpose, equipmentType, brand];
+            
+            for (let input of allInputs) {
+                if (input.value && dangerousChars.test(input.value)) {
+                    alert('Invalid characters detected in ' + input.name + '.');
+                    input.focus();
+                    return false;
+                }
+            }
+            
+            // Check length limits
+            if (fullName.value.length > 255 || email.value.length > 255 || nik.value.length > 16) {
+                alert('Input too long.');
+                return false;
+            }
+            
+            return true;
+        }
+        
+        // Sanitize input function
+        function sanitizeInput(input) {
+            return input.replace(/[<>\"'&;()]/g, '');
+        }
+        
+        // Apply sanitization to all text inputs
+        document.addEventListener('DOMContentLoaded', function() {
+            const textInputs = document.querySelectorAll('input[type="text"], input[type="email"]');
+            textInputs.forEach(input => {
+                input.addEventListener('input', function() {
+                    this.value = sanitizeInput(this.value);
+                });
+            });
+        });
+
         function previewImage(event, previewId) {
             const input = event.target;
             const preview = document.getElementById(previewId);
