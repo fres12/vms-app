@@ -14,6 +14,8 @@ use Maatwebsite\Excel\Concerns\WithHeadings;
 use App\Models\Admin;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Storage;
+use SimpleSoftwareIO\QrCode\Facades\QrCode;
 
 class VisitorController extends Controller
 {
@@ -434,12 +436,12 @@ class VisitorController extends Controller
                 'depts.nameDept as department_name',
                 DB::raw("CASE 
                     WHEN visitors.idcardphoto IS NOT NULL 
-                    THEN CONCAT('" . url('storage') . "/', visitors.idcardphoto)
+                    THEN CONCAT('" . url('storage') . "//', visitors.idcardphoto)
                     ELSE NULL 
                 END as id_card_url"),
                 DB::raw("CASE 
                     WHEN visitors.selfphoto IS NOT NULL 
-                    THEN CONCAT('" . url('storage') . "/', visitors.selfphoto)
+                    THEN CONCAT('" . url('storage') . "//', visitors.selfphoto)
                     ELSE NULL 
                 END as self_photo_url")
             )
@@ -472,197 +474,187 @@ class VisitorController extends Controller
         return 'VMS-' . date('Ymd') . '-' . str_pad($visitorId, 4, '0', STR_PAD_LEFT);
     }
 
-    private function generateBarcode($ticketNumber)
+    private function generateQrCode($content)
     {
-        $generator = new \Picqer\Barcode\BarcodeGeneratorPNG();
-        return base64_encode($generator->getBarcode($ticketNumber, $generator::TYPE_CODE_128));
+        try {
+            if (!class_exists(\SimpleSoftwareIO\QrCode\Facades\QrCode::class)) {
+                throw new \Exception('QR code package is not installed. Run: composer require simplesoftwareio/simple-qrcode');
+            }
+
+            $path = 'qrcodes';
+            Storage::disk('public')->makeDirectory($path);
+
+            // Try PNG first (requires GD/Imagick)
+            try {
+                $png = QrCode::format('png')
+                    ->size(400)
+                    ->margin(1)
+                    ->errorCorrection('M')
+                    ->generate($content);
+
+                $filename = 'qrcode_' . preg_replace('/[^A-Za-z0-9\-]/', '_', $content) . '_' . time() . '.png';
+                $fullPath = $path . '/' . $filename;
+
+                if (!Storage::disk('public')->put($fullPath, $png)) {
+                    throw new \Exception('Failed to save QR code file to public storage');
+                }
+
+                return [
+                    'path' => $fullPath,
+                    'base64' => base64_encode($png)
+                ];
+            } catch (\Throwable $e) {
+                \Log::warning('PNG QR generation failed, falling back to SVG', [
+                    'error' => $e->getMessage()
+                ]);
+            }
+
+            // Fallback to SVG (no GD required)
+            $svg = QrCode::format('svg')
+                ->size(400)
+                ->margin(1)
+                ->errorCorrection('M')
+                ->generate($content);
+
+            $filename = 'qrcode_' . preg_replace('/[^A-Za-z0-9\-]/', '_', $content) . '_' . time() . '.svg';
+            $fullPath = $path . '/' . $filename;
+
+            if (!Storage::disk('public')->put($fullPath, $svg)) {
+                throw new \Exception('Failed to save QR code SVG to public storage');
+            }
+
+            return [
+                'path' => $fullPath,
+                'base64' => base64_encode($svg)
+            ];
+        } catch (\Exception $e) {
+            \Log::error('QR code generation failed:', [
+                'error' => $e->getMessage(),
+                'content' => $content
+            ]);
+            return null;
+        }
     }
 
     public function updateStatus(Request $request, $id)
     {
         try {
             DB::beginTransaction();
-
-            $request->validate([
-                'status' => 'required|in:Accepted,Rejected',
-            ]);
-
-            // Check if visitor exists
+            
             $visitor = DB::table('visitors')->where('id', $id)->first();
             if (!$visitor) {
                 throw new \Exception('Visitor not found');
             }
 
-            // Get current admin's deptID
             $admin = auth()->guard('admin')->user();
-            if (!$admin) {
-                throw new \Exception('Admin not authenticated');
-            }
+            $newStatus = $request->status;
 
-            // Check if admin is master admin
-            $isMasterAdmin = $admin->deptID === 1;
-            
-            // Check if admin is the target department
-            $isDeptPurpose = $admin->deptID === $visitor->deptpurpose;
-
-            // Get department info
-            $dept = DB::table('depts')
-                ->where('deptID', $visitor->deptpurpose)
-                ->first();
-
-            if (!$dept) {
-                throw new \Exception('Department not found');
-            }
-
-            // Check if visit date is within allowed timeframe (before H-2 12:00)
-            $visitStartDate = Carbon::parse($visitor->startdate);
-            $deadlineDate = $visitStartDate->copy()->subDays(2)->setTime(12, 0, 0);
-            $now = Carbon::now();
-
-            if ($now->greaterThan($deadlineDate)) {
-                $newStatus = 'Declined';
-                $message = 'Request automatically declined as it is past the deadline (H-2 12:00)';
-            } else {
-                if ($request->status === 'Accepted') {
-                    if ($isMasterAdmin) {
-                        if ($visitor->status !== 'Approved (1/2)') {
-                            throw new \Exception('Request approval to department admin first');
-                        }
-                        $newStatus = 'Approved (2/2)';
-                    } else if ($isDeptPurpose) {
-                        if ($visitor->status !== 'For Review') {
-                            throw new \Exception('Invalid state to change status');
-                        }
-                        $newStatus = 'Approved (1/2)';
-                    } else {
-                        throw new \Exception('You are not authorized to approve this visitor');
-                    }
-                } else {
-                    if ($visitor->status !== 'For Review') {
-                        throw new \Exception('Invalid state to change status');
-                    }
-                    if (!$isMasterAdmin && !$isDeptPurpose) {
-                        throw new \Exception('You are not authorized to decline this visitor');
-                    }
-                    $newStatus = 'Declined';
-                }
-            }
-
-            // Generate ticket number and barcode for final approval
-            $ticketNumber = null;
-            $barcode = null;
-            if ($newStatus === 'Approved (2/2)') {
-                $ticketNumber = $this->generateTicketNumber($id);
-                $barcode = $this->generateBarcode($ticketNumber);
-            }
-
-            // Update visitor status
-            $updated = DB::table('visitors')
-                ->where('id', $id)
-                ->update([
-                    'status' => $newStatus,
-                    'approved_date' => $newStatus === 'Approved (2/2)' ? now() : null,
-                    'ticket_number' => $ticketNumber,
-                    'barcode' => $barcode
-                ]);
-
-            if (!$updated) {
-                throw new \Exception('Failed to update visitor status');
-            }
-
-            DB::commit();
-
-            // Send email notifications based on new status
-            if ($newStatus === 'Approved (1/2)') {
-                // Get master admin
-                $masterAdmin = DB::table('accounts')
-                    ->where('deptID', 1)
-                    ->first();
-
-                if ($masterAdmin) {
-                    \Log::info('Sending email to master admin', [
-                        'master_admin_email' => $masterAdmin->email,
-                        'visitor_id' => $id,
-                        'status' => $newStatus
+            // Department Admin Approval (First Level)
+            if ($newStatus === 'Accepted' && $admin->deptID !== 1) {
+                $updated = DB::table('visitors')
+                    ->where('id', $id)
+                    ->update([
+                        'status' => 'Approved (1/2)',
+                        'updated_at' => now()
                     ]);
 
+                if (!$updated) {
+                    throw new \Exception('Failed to update visitor status');
+                }
+
+                DB::commit();
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Status updated to Approved (1/2)',
+                    'status' => 'Approved (1/2)'
+                ]);
+            }
+
+            // Master Admin Final Approval (Second Level)
+            if ($newStatus === 'Accepted' && $admin->deptID === 1 && $visitor->status === 'Approved (1/2)') {
+                // Generate ticket number
+                $ticketNumber = $this->generateTicketNumber($id);
+                
+                // Generate QR code
+                $qrData = $this->generateQrCode($ticketNumber);
+                if (!$qrData) {
+                    throw new \Exception('Failed to generate QR code');
+                }
+
+                // Update visitor status
+                $updated = DB::table('visitors')
+                    ->where('id', $id)
+                    ->update([
+                        'status' => 'Approved (2/2)',
+                        'approved_date' => now(),
+                        'ticket_number' => $ticketNumber,
+                        'barcode' => $qrData['path']
+                    ]);
+
+                if (!$updated) {
+                    throw new \Exception('Failed to update visitor data');
+                }
+
+                // Get department info
+                $dept = DB::table('depts')
+                    ->where('deptID', $visitor->deptpurpose)
+                    ->first();
+
+                // Send email to visitor
+                try {
                     Mail::send(new VisitorNotification([
-                        'recipient_name' => $masterAdmin->name,
                         'name' => $visitor->fullname,
                         'company' => $visitor->company,
                         'visit_purpose' => $visitor->visit_purpose,
                         'startdate' => $visitor->startdate,
                         'enddate' => $visitor->enddate,
                         'department' => $dept->nameDept,
-                        'status' => 'Needs Final Approval',
-                        'deadline' => $deadlineDate->format('d-m-Y H:i'),
-                        'message' => "This visitor has been approved by {$dept->nameDept} department and needs your final approval.",
-                        'to' => $masterAdmin->email
+                        'status' => 'Approved',
+                        'message' => 'Your visit request has been fully approved.',
+                        'ticket_number' => $ticketNumber,
+                        'barcode' => $qrData['base64'],
+                        'to' => $visitor->email
                     ]));
-
-                    \Log::info('Email sent successfully to master admin', [
-                        'master_admin_email' => $masterAdmin->email,
-                        'visitor_id' => $id
-                    ]);
-                } else {
-                    \Log::error('Master admin not found', [
-                        'visitor_id' => $id
-                    ]);
+                } catch (\Exception $e) {
+                    \Log::error('Failed to send email:', ['error' => $e->getMessage()]);
                 }
-            } elseif ($newStatus === 'Approved (2/2)') {
-                Mail::send(new VisitorNotification([
-                    'name' => $visitor->fullname,
-                    'company' => $visitor->company,
-                    'visit_purpose' => $visitor->visit_purpose,
-                    'startdate' => $visitor->startdate,
-                    'enddate' => $visitor->enddate,
-                    'department' => $dept->nameDept,
-                    'status' => 'Approved',
-                    'message' => 'Your visit request has been fully approved.',
-                    'ticket_number' => $ticketNumber,
-                    'barcode' => $barcode,
-                    'to' => $visitor->email
-                ]));
-            } elseif ($newStatus === 'Declined') {
-                Mail::send(new VisitorNotification([
-                    'name' => $visitor->fullname,
-                    'company' => $visitor->company,
-                    'visit_purpose' => $visitor->visit_purpose,
-                    'startdate' => $visitor->startdate,
-                    'enddate' => $visitor->enddate,
-                    'department' => $dept->nameDept,
-                    'status' => 'Declined',
-                    'message' => isset($message) ? $message : 'Your visit request has been declined.',
-                    'to' => $visitor->email
-                ]));
+
+                DB::commit();
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Status updated to Approved (2/2)',
+                    'status' => 'Approved (2/2)',
+                    'approved_date' => now()->format('d-m-Y H:i')
+                ]);
             }
 
-            // Format the approved_date for response
-            $approvedDate = null;
-            if ($newStatus === 'Approved (2/2)') {
-                $approvedDate = Carbon::now()->format('d-m-Y H:i');
+            // Rejection
+            if ($newStatus === 'Rejected') {
+                DB::table('visitors')
+                    ->where('id', $id)
+                    ->update([
+                        'status' => 'Rejected',
+                        'updated_at' => now()
+                    ]);
+
+                DB::commit();
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Status updated to Rejected',
+                    'status' => 'Rejected'
+                ]);
             }
 
-            return response()->json([
-                'success' => true,
-                'status' => $newStatus,
-                'approved_date' => $approvedDate,
-                'ticket_number' => $ticketNumber,
-                'barcode' => $barcode,
-                'message' => isset($message) ? $message : 'Status updated successfully'
-            ]);
+            throw new \Exception('Invalid status update request');
 
         } catch (\Exception $e) {
             DB::rollBack();
-            \Log::error('Error updating visitor status', [
-                'error' => $e->getMessage(),
-                'trace' => $e->getTraceAsString(),
-                'visitor_id' => $id ?? null
-            ]);
+            \Log::error('Status update failed:', ['error' => $e->getMessage()]);
+            
             return response()->json([
                 'success' => false,
                 'message' => $e->getMessage()
-            ]);
+            ], 400);
         }
     }
 
@@ -1110,5 +1102,23 @@ class VisitorController extends Controller
                 'message' => 'An error occurred while changing password'
             ]);
         }
+    }
+
+    public function viewBarcode($ticket_number)
+    {
+        $visitor = DB::table('visitors')->where('ticket_number', $ticket_number)->first();
+        if (!$visitor || !$visitor->barcode) {
+            abort(404);
+        }
+
+        $storagePath = ltrim($visitor->barcode, '/');
+        if (!Storage::disk('public')->exists($storagePath)) {
+            abort(404);
+        }
+
+        $data = Storage::disk('public')->get($storagePath);
+        $ext = strtolower(pathinfo($storagePath, PATHINFO_EXTENSION));
+        $mime = $ext === 'svg' ? 'image/svg+xml' : 'image/png';
+        return response($data)->header('Content-Type', $mime);
     }
 }

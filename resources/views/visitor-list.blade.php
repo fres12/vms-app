@@ -72,8 +72,10 @@
                             <th class="px-3 py-1 border text-white">ID Card</th>
                             <th class="px-3 py-1 border text-white">Self Photo</th>
                             <th class="px-6 py-1 border text-center text-white">Submit Date</th>
-                            <th class="px-6 py-1 border text-center text-white">Status</th>
+                            <th class="px-3 py-1 border text-white">Status</th>
+                            <th class="px-6 py-1 border text-center text-white">Barcode</th>
                             <th class="px-6 py-1 border text-center text-white">Approved Date</th>
+                            <th class="px-14 py-1 border text-center text-white">Ticket Number</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -107,7 +109,7 @@
                                         <a href="{{ asset('storage/' . $visitor->selfphoto) }}" target="_blank" class="text-blue-600 underline">View</a>
                                     @endif
                                 </td>
-                                <td class="p-1.5 border">{{ \Carbon\Carbon::parse($visitor->submit_date)->format('d-m-Y H:i') }}</td>
+                                <td class="p-1.5 border">{{ $visitor->submit_date }}</td>
                                 <td class="p-1.5 border text-center">
                                     <span class="text-center 
                                         @if($isMasterAdmin && $visitor->status === 'Approved (1/2)')
@@ -117,6 +119,22 @@
                                         @endif
                                     ">{{ $visitor->status }}</span>
                                 </td>
+                                <td class="p-1.5 border text-center">
+                                    @if($visitor->barcode && $visitor->status === 'Approved (2/2)')
+                                        <a href="{{ route('barcode.view', $visitor->ticket_number) }}" 
+                                           target="_blank"
+                                           class="inline-flex items-center text-blue-600 hover:text-blue-800">
+                                            <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/>
+                                            </svg>
+                                            View QR
+                                        </a>
+                                    @else
+                                        -
+                                    @endif
+                                </td>
+
                                 <td class="p-1.5 border">
                                     @if($visitor->approved_date)
                                         {{ \Carbon\Carbon::parse($visitor->approved_date)->format('d-m-Y H:i') }}
@@ -124,6 +142,7 @@
                                         -
                                     @endif
                                 </td>
+                                <td class="p-1.5 border">{{ $visitor->ticket_number }}</td>
                             </tr>
                         @empty
                             <tr>
@@ -205,101 +224,51 @@
             }
 
             async function updateSelectedStatus(action) {
-            const checkboxes = document.getElementsByClassName('visitor-checkbox');
-            const selectedIds = [];
-                const invalidStatusSelected = [];
-            
-            for (let checkbox of checkboxes) {
-                if (checkbox.checked) {
-                        const status = checkbox.getAttribute('data-status');
-                        const isMasterAdmin = {{ $isMasterAdmin ? 'true' : 'false' }};
-                        
-                        // Check if status can be changed
-                        if (action === 'Approve Selected') {
-                            if (isMasterAdmin && status !== 'Approved (1/2)') {
-                                invalidStatusSelected.push('Request approval to department admin first');
-                                continue;
-                            } else if (!isMasterAdmin && status !== 'For Review') {
-                                invalidStatusSelected.push('Invalid state to change status');
-                                continue;
-                            }
-                        } else if (action === 'Decline Selected') {
-                            if (status !== 'For Review') {
-                                invalidStatusSelected.push('Invalid state to change status');
-                                continue;
-                            }
-                        }
-                        
-                    selectedIds.push(checkbox.value);
-                }
-            }
-
-                if (selectedIds.length === 0 && invalidStatusSelected.length > 0) {
-                    alert(invalidStatusSelected[0]);
-                    return;
-                }
-
-            if (selectedIds.length === 0) {
-                    alert('Please select at least one visitor');
-                    return;
-                }
-
-                if (action !== 'Export Selected' && invalidStatusSelected.length > 0) {
-                    alert(invalidStatusSelected[0]);
-                return;
-            }
-
-            // Map action to status
-            const status = action === 'Approve Selected' ? 'Accepted' : 'Rejected';
-
-                // If it's an export action, handle differently
-                if (action === 'Export Selected') {
-                    window.location.href = '{{ route('visitors.export') }}?' + selectedIds.map(id => 'selected_ids[]=' + id).join('&');
-                    return;
-                }
-
-                // Show loading overlay
-                showLoadingOverlay();
-
                 try {
-                    // Process all updates in parallel
-                    const updatePromises = selectedIds.map(id =>
-                fetch('/visitors/' + id + '/status', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-CSRF-TOKEN': '{{ csrf_token() }}'
-                    },
-                    body: JSON.stringify({ status })
-                }).then(res => res.json())
-                    );
+                    const checkboxes = document.getElementsByClassName('visitor-checkbox');
+                    const selectedIds = Array.from(checkboxes)
+                        .filter(cb => cb.checked)
+                        .map(cb => cb.value);
 
-                    // Wait for all updates to complete
-                    const results = await Promise.all(updatePromises);
+                    if (selectedIds.length === 0) {
+                        alert('Please select at least one visitor');
+                        return;
+                    }
+
+                    const status = action === 'Approve Selected' ? 'Accepted' : 'Rejected';
+
+                    showLoadingOverlay();
                     
-                    // Check if any update failed
-                    const failures = results.filter(result => !result.success);
-                    if (failures.length > 0) {
-                        throw new Error(failures[0].message || 'Failed to update some statuses');
+                    for (const id of selectedIds) {
+                        const response = await fetch(`/visitors/${id}/status`, {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'Accept': 'application/json',
+                                'X-CSRF-TOKEN': '{{ csrf_token() }}'
+                            },
+                            body: JSON.stringify({ status })
+                        });
+
+                        const text = await response.text();
+                        let result;
+                        try { result = JSON.parse(text); } catch (_) { result = { success: false, message: text || 'Unknown error' }; }
+
+                        if (!response.ok || !result.success) {
+                            throw new Error(result.message || `Request failed (${response.status})`);
+                        }
                     }
 
-                    // Reload table data
+                    // Reload table after all updates
                     await reloadTableData();
-
-                    // Uncheck all checkboxes
-                    document.getElementById('selectAll').checked = false;
-                    for (let checkbox of checkboxes) {
-                        checkbox.checked = false;
-                    }
-
+                    
                 } catch (error) {
                     alert(error.message || 'An error occurred while updating status');
-                console.error('Error:', error);
+                    console.error('Error:', error);
                 } finally {
-                    // Hide loading overlay
                     hideLoadingOverlay();
                 }
-        }
+            }
     </script>
 </body>
 </html>
