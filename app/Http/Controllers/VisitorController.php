@@ -305,41 +305,74 @@ class VisitorController extends Controller
         }
     }
 
-    public function index()
+    public function index(Request $request)
     {
-        $admin = auth()->guard('admin')->user();
-        
-        // Base query
-        $query = DB::table('visitors')
-            ->select(
-                'visitors.*',
-                'depts.nameDept as department_name',
-                'accounts.name as pic_name',
-                'accounts.position as pic_position',
-                'accounts.no_employee as pic_employee_id'
-            )
-            ->leftJoin('depts', 'visitors.deptpurpose', '=', 'depts.deptID')
-            ->leftJoin('accounts', 'visitors.deptpurpose', '=', 'accounts.deptID')
-            ->orderByDesc('visitors.submit_date');
+        try {
+            $admin = auth()->guard('admin')->user();
+            
+            // Sanitize search input
+            $searchTerm = $this->sanitizeSearchInput($request->get('search', ''));
+            
+            // Base query with security measures
+            $query = DB::table('visitors')
+                ->select(
+                    'visitors.*',
+                    'depts.nameDept as department_name',
+                    'accounts.name as pic_name',
+                    'accounts.position as pic_position',
+                    'accounts.no_employee as pic_employee_id'
+                )
+                ->leftJoin('depts', 'visitors.deptpurpose', '=', 'depts.deptID')
+                ->leftJoin('accounts', 'visitors.deptpurpose', '=', 'accounts.deptID')
+                ->orderByDesc('visitors.submit_date');
 
-        // If not master admin (deptID != 1), filter by target department
-        if ($admin->deptID !== 1) {
-            $query->where('visitors.deptpurpose', $admin->deptID);
+            // If search term exists, add secure search conditions
+            if (!empty($searchTerm)) {
+                $query->where(function($q) use ($searchTerm) {
+                    $q->whereRaw('LOWER(visitors.fullname) LIKE ?', ['%' . strtolower($searchTerm) . '%'])
+                      ->orWhereRaw('LOWER(visitors.email) LIKE ?', ['%' . strtolower($searchTerm) . '%'])
+                      ->orWhereRaw('LOWER(visitors.nik) LIKE ?', ['%' . strtolower($searchTerm) . '%'])
+                      ->orWhereRaw('LOWER(visitors.company) LIKE ?', ['%' . strtolower($searchTerm) . '%'])
+                      ->orWhereRaw('LOWER(visitors.phone) LIKE ?', ['%' . strtolower($searchTerm) . '%'])
+                      ->orWhereRaw('LOWER(visitors.visit_purpose) LIKE ?', ['%' . strtolower($searchTerm) . '%'])
+                      ->orWhereRaw('LOWER(depts.nameDept) LIKE ?', ['%' . strtolower($searchTerm) . '%']);
+                });
+            }
+
+            // Department filter for non-master admin
+            if ($admin->deptID !== 1) {
+                $query->where('visitors.deptpurpose', $admin->deptID);
+            }
+
+            // Get department info for header
+            $deptInfo = DB::table('depts')
+                ->where('deptID', $admin->deptID)
+                ->first();
+
+            // Execute query with limits
+            $visitors = $query->limit(1000)->get(); // Limit results for performance
+
+            return view('visitor-list', [
+                'visitors' => $visitors,
+                'isMasterAdmin' => $admin->deptID === 1,
+                'deptInfo' => $deptInfo,
+                'searchTerm' => $searchTerm
+            ]);
+
+        } catch (\Exception $e) {
+            \Log::error('Error in visitor list:', [
+                'error' => $e->getMessage(),
+                'user_id' => $admin->id ?? null,
+                'search' => $searchTerm ?? null
+            ]);
+            
+            return view('visitor-list', [
+                'visitors' => collect([]),
+                'isMasterAdmin' => $admin->deptID === 1,
+                'deptInfo' => $deptInfo ?? null,
+                'error' => 'An error occurred while loading the visitor list.'
+            ]);
         }
-
-        $visitors = $query->get();
-
-        // Get department info for header
-        $deptInfo = DB::table('depts')
-            ->where('deptID', $admin->deptID)
-            ->first();
-
-        return view('visitor-list', [
-            'visitors' => $visitors,
-            'isMasterAdmin' => $admin->deptID === 1,
-            'deptInfo' => $deptInfo,
-            'isDeptPurpose' => true // This will be true since we already filter by deptID above
-        ]);
     }
 
     public function approve($id)
@@ -600,8 +633,15 @@ class VisitorController extends Controller
                     ->where('deptID', $visitor->deptpurpose)
                     ->first();
 
-                // Send email to visitor
+                // Get QR code content and convert to proper data URI
                 try {
+                    $qrContent = Storage::disk('public')->get($qrData['path']);
+                    $mimeType = 'image/svg+xml';
+                    
+                    // Create proper data URI for SVG
+                    $base64QrCode = 'data:' . $mimeType . ';base64,' . base64_encode($qrContent);
+
+                    // Send email with QR code
                     Mail::send(new VisitorNotification([
                         'name' => $visitor->fullname,
                         'company' => $visitor->company,
@@ -612,11 +652,14 @@ class VisitorController extends Controller
                         'status' => 'Approved',
                         'message' => 'Your visit request has been fully approved.',
                         'ticket_number' => $ticketNumber,
-                        'barcode' => $qrData['base64'],
+                        'barcode' => $base64QrCode, // Send properly formatted data URI
                         'to' => $visitor->email
                     ]));
                 } catch (\Exception $e) {
-                    \Log::error('Failed to send email:', ['error' => $e->getMessage()]);
+                    \Log::error('Failed to process or send QR code:', [
+                        'error' => $e->getMessage(),
+                        'path' => $qrData['path']
+                    ]);
                 }
 
                 DB::commit();
@@ -833,6 +876,36 @@ class VisitorController extends Controller
             $input = str_replace(chr(0), '', $input);
         }
         return $input;
+    }
+
+    /**
+     * Sanitize search input to prevent SQL injection and XSS
+     * @param string $input
+     * @return string
+     */
+    private function sanitizeSearchInput($input)
+    {
+        if (empty($input)) {
+            return '';
+        }
+
+        // Remove any non-alphanumeric characters except spaces and common symbols
+        $input = preg_replace('/[^a-zA-Z0-9\s\-\_\@\.\,]/', '', $input);
+        
+        // Remove SQL injection characters
+        $input = str_replace(
+            ['\'', '"', ';', '*', '=', 'OR', 'AND', '--'], 
+            '', 
+            $input
+        );
+        
+        // Convert special characters to HTML entities
+        $input = htmlspecialchars($input, ENT_QUOTES, 'UTF-8');
+        
+        // Limit length
+        $input = substr($input, 0, 100);
+        
+        return trim($input);
     }
 
     /**

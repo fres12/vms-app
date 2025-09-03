@@ -61,9 +61,9 @@
                     <h3 style="color: #003368; margin-top: 0;">Visitor Pass</h3>
                     <p style="margin-bottom: 15px;"><strong>Ticket Number:</strong> {{ $data['ticket_number'] }}</p>
                     <div style="text-align: center; background: white; padding: 15px; border: 1px solid #eee; border-radius: 4px;">
-                        <img src="data:image/png;base64,{{ $data['barcode'] }}" 
-                             alt="Barcode"
-                             style="max-width: 300px; height: auto; display: inline-block;">
+                        <img src="{{ $data['barcode'] }} "
+                             alt="Visitor QR Code"
+                             style="width: 200px; height: 200px; display: inline-block;">
                     </div>
                     <p style="font-size: 12px; color: #666; margin-top: 15px; text-align: center;">
                         Please show this visitor pass at the security checkpoint

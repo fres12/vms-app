@@ -28,25 +28,50 @@
 
         <!-- Table section -->
         <div class="bg-white dark:bg-neutral-900 p-8 px-4 sm:px-8 rounded-xl shadow mt-4">
-            <div class="flex justify-end items-center gap-1 mb-2">
-                <button type="button" 
-                        onclick="updateSelectedStatus('Approve Selected')" 
-                        style="background-color: #003368;"
-                        class="text-white px-3 py-1.5 rounded text-xs hover:bg-[#002244] transition-colors">
-                    Approve
-                </button>
-                <button type="button"
-                        onclick="updateSelectedStatus('Decline Selected')" 
-                        style="background-color: #003368;"
-                        class="text-white px-3 py-1.5 rounded text-xs hover:bg-[#002244] transition-colors">
-                    Decline
-                </button>
-                <button type="button"
-                        onclick="updateSelectedStatus('Export Selected')"
-                   style="background-color: #003368;"
-                   class="text-white px-3 py-1.5 rounded text-xs hover:bg-[#002244] transition-colors">
-                    Export
-                </button>
+            <!-- Update the buttons and search bar layout -->
+            <div class="flex justify-end items-center gap-4 mb-2">
+                <!-- Search bar first -->
+                <div class="w-64">
+                    <div class="relative">
+                        <input type="text" 
+                               id="searchInput" 
+                               name="search"
+                               placeholder="Search visitors..." 
+                               maxlength="100"
+                               pattern="[a-zA-Z0-9\s\-\_\@\.\,]*"
+                               class="w-full px-4 py-1.5 pr-10 text-xs border border-gray-300 rounded focus:outline-none focus:border-[#003368]"
+                               value="{{ $searchTerm ?? '' }}"
+                               autocomplete="off"
+                               spellcheck="false">
+                        <span class="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+                            </svg>
+                        </span>
+                    </div>
+                </div>
+
+                <!-- Action buttons after search -->
+                <div class="flex items-center gap-1">
+                    <button type="button" 
+                            onclick="updateSelectedStatus('Approve Selected')" 
+                            style="background-color: #003368;"
+                            class="text-white px-3 py-1.5 rounded text-xs hover:bg-[#002244] transition-colors">
+                        Approve
+                    </button>
+                    <button type="button"
+                            onclick="updateSelectedStatus('Decline Selected')" 
+                            style="background-color: #003368;"
+                            class="text-white px-3 py-1.5 rounded text-xs hover:bg-[#002244] transition-colors">
+                        Decline
+                    </button>
+                    <button type="button"
+                            onclick="updateSelectedStatus('Export Selected')"
+                            style="background-color: #003368;"
+                            class="text-white px-3 py-1.5 rounded text-xs hover:bg-[#002244] transition-colors">
+                        Export
+                    </button>
+                </div>
             </div>
 
             <div class="overflow-x-auto relative">
@@ -269,6 +294,79 @@
                     hideLoadingOverlay();
                 }
             }
+
+            document.addEventListener('DOMContentLoaded', function() {
+                const searchInput = document.getElementById('searchInput');
+                let searchTimeout;
+                
+                searchInput.addEventListener('input', function(e) {
+                    // Clear previous timeout
+                    if (searchTimeout) {
+                        clearTimeout(searchTimeout);
+                    }
+                    
+                    // Sanitize input
+                    let searchTerm = e.target.value;
+                    searchTerm = searchTerm
+                        .replace(/[^a-zA-Z0-9\s\-\_\@\.\,]/g, '') // Remove invalid characters
+                        .trim()
+                        .toLowerCase();
+                    
+                    // Debounce search to prevent DoS
+                    searchTimeout = setTimeout(() => {
+                        const tableRows = document.querySelectorAll('tbody tr');
+                        let hasVisibleRows = false;
+                        
+                        // Rate limiting
+                        if (searchTerm.length > 100) {
+                            searchTerm = searchTerm.substr(0, 100);
+                            searchInput.value = searchTerm;
+                        }
+                        
+                        tableRows.forEach(row => {
+                            if (row.classList.contains('no-results-row')) {
+                                row.remove();
+                                return;
+                            }
+                            
+                            let text = '';
+                            row.querySelectorAll('td').forEach((td, index) => {
+                                if (index > 0) { // Skip checkbox column
+                                    text += td.textContent + ' ';
+                                }
+                            });
+                            
+                            // Case-insensitive, sanitized search
+                            if (text.toLowerCase().includes(searchTerm)) {
+                                row.style.display = '';
+                                hasVisibleRows = true;
+                            } else {
+                                row.style.display = 'none';
+                            }
+                        });
+                        
+                        // Show/hide "No results" message with XSS prevention
+                        if (!hasVisibleRows && searchTerm) {
+                            const tbody = document.querySelector('tbody');
+                            const colspan = document.querySelectorAll('thead th').length;
+                            
+                            const noResultsRow = document.createElement('tr');
+                            noResultsRow.className = 'no-results-row';
+                            noResultsRow.innerHTML = `
+                                <td colspan="${colspan}" class="py-8 text-center">
+                                    <div class="flex flex-col items-center justify-center text-gray-500">
+                                        <svg class="w-12 h-12 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+                                        </svg>
+                                        <p class="text-sm font-medium">No matching results found</p>
+                                    </div>
+                                </td>
+                            `;
+                            tbody.appendChild(noResultsRow);
+                        }
+                    }, 300); // Debounce delay
+                });
+            });
     </script>
 </body>
 </html>
