@@ -66,7 +66,7 @@
                         Decline
                     </button>
                     <button type="button"
-                            onclick="updateSelectedStatus('Export Selected')"
+                            onclick="exportSelected()"
                             style="background-color: #003368;"
                             class="text-white px-3 py-1.5 rounded text-xs hover:bg-[#002244] transition-colors">
                         Export
@@ -260,7 +260,8 @@
                         return;
                     }
 
-                    const status = action === 'Approve Selected' ? 'Accepted' : 'Rejected';
+                    const isApprove = action === 'Approve Selected';
+                    const status = isApprove ? 'Accepted' : 'Rejected';
 
                     showLoadingOverlay();
                     
@@ -295,6 +296,23 @@
                 }
             }
 
+            function exportSelected() {
+                const checkboxes = document.getElementsByClassName('visitor-checkbox');
+                const selectedIds = Array.from(checkboxes)
+                    .filter(cb => cb.checked)
+                    .map(cb => cb.value);
+
+                if (selectedIds.length === 0) {
+                    alert('Please select at least one visitor');
+                    return;
+                }
+
+                const params = new URLSearchParams();
+                selectedIds.forEach(id => params.append('selected_ids[]', id));
+                const url = `/visitors/export?${params.toString()}`;
+                window.location.href = url;
+            }
+
             document.addEventListener('DOMContentLoaded', function() {
                 const searchInput = document.getElementById('searchInput');
                 let searchTimeout;
@@ -308,7 +326,7 @@
                     // Sanitize input
                     let searchTerm = e.target.value;
                     searchTerm = searchTerm
-                        .replace(/[^a-zA-Z0-9\s\-\_\@\.\,]/g, '') // Remove invalid characters
+                        .replace(/[^a-zA-Z0-9\s\-\_\@\.,]/g, '') // Remove invalid characters
                         .trim()
                         .toLowerCase();
                     

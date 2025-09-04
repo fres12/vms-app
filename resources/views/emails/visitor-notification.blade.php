@@ -57,11 +57,31 @@
         </table>
 
             @if(isset($data['ticket_number']) && isset($data['barcode']))
+                <?php
+                    // Try to embed as CID for better client compatibility
+                    $cid = null;
+                    try {
+                        if (is_string($data['barcode']) && strpos($data['barcode'], 'data:') === 0 && strpos($data['barcode'], ';base64,') !== false) {
+                            [$meta, $base64] = explode(';base64,', $data['barcode'], 2);
+                            $mime = substr($meta, 5);
+                            $binary = base64_decode($base64, true);
+                            if ($binary !== false) {
+                                $isPng = strncmp($binary, "\x89PNG\r\n\x1a\n", 8) === 0;
+                                $looksSvg = !$isPng && (stripos(ltrim($binary), '<svg') === 0);
+                                $filename = $isPng ? 'qrcode.png' : ($looksSvg ? 'qrcode.svg' : 'qrcode');
+                                $mime = $isPng ? 'image/png' : ($looksSvg ? 'image/svg+xml' : $mime);
+                                $cid = $message->embedData($binary, $filename, $mime);
+                            }
+                        }
+                    } catch (\Throwable $e) {
+                        // fallback to data uri below
+                    }
+                ?>
                 <div style="margin-top: 20px; padding: 20px; border: 2px solid #003368; border-radius: 8px;">
                     <h3 style="color: #003368; margin-top: 0;">Visitor Pass</h3>
                     <p style="margin-bottom: 15px;"><strong>Ticket Number:</strong> {{ $data['ticket_number'] }}</p>
                     <div style="text-align: center; background: white; padding: 15px; border: 1px solid #eee; border-radius: 4px;">
-                        <img src="{{ $data['barcode'] }} "
+                        <img src="{{ $cid ?? $data['barcode'] }}"
                              alt="Visitor QR Code"
                              style="width: 200px; height: 200px; display: inline-block;">
                     </div>

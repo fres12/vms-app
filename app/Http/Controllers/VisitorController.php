@@ -397,8 +397,7 @@ class VisitorController extends Controller
             }
 
             DB::table('visitors')->where('id', $id)->update([
-                'status' => 'Accepted',
-                'updated_at' => now()
+                'status' => 'Accepted'
             ]);
 
             return view('visitor-response', [
@@ -438,8 +437,7 @@ class VisitorController extends Controller
             }
 
             DB::table('visitors')->where('id', $id)->update([
-                'status' => 'Rejected',
-                'updated_at' => now()
+                'status' => 'Rejected'
             ]);
 
             return view('visitor-response', [
@@ -476,7 +474,12 @@ class VisitorController extends Controller
                     WHEN visitors.selfphoto IS NOT NULL 
                     THEN CONCAT('" . url('storage') . "//', visitors.selfphoto)
                     ELSE NULL 
-                END as self_photo_url")
+                END as self_photo_url"),
+                DB::raw("CASE
+                    WHEN visitors.ticket_number IS NOT NULL AND visitors.barcode IS NOT NULL
+                    THEN CONCAT('" . url('/barcode') . "/', visitors.ticket_number)
+                    ELSE NULL
+                END as barcode_url")
             )
             ->leftJoin('depts', 'visitors.deptpurpose', '=', 'depts.deptID')
             ->orderByDesc('visitors.submit_date');
@@ -581,14 +584,23 @@ class VisitorController extends Controller
 
             $admin = auth()->guard('admin')->user();
             $newStatus = $request->status;
+            $currentStatus = $visitor->status;
+
+            // Block changes if already final
+            if (in_array($currentStatus, ['Rejected', 'Approved (2/2)'])) {
+                throw new \Exception('This visitor has already been processed.');
+            }
 
             // Department Admin Approval (First Level)
             if ($newStatus === 'Accepted' && $admin->deptID !== 1) {
+                if ($currentStatus !== 'For Review') {
+                    throw new \Exception('Invalid status transition');
+                }
+
                 $updated = DB::table('visitors')
                     ->where('id', $id)
                     ->update([
-                        'status' => 'Approved (1/2)',
-                        'updated_at' => now()
+                        'status' => 'Approved (1/2)'
                     ]);
 
                 if (!$updated) {
@@ -604,7 +616,11 @@ class VisitorController extends Controller
             }
 
             // Master Admin Final Approval (Second Level)
-            if ($newStatus === 'Accepted' && $admin->deptID === 1 && $visitor->status === 'Approved (1/2)') {
+            if ($newStatus === 'Accepted' && $admin->deptID === 1) {
+                if ($currentStatus !== 'Approved (1/2)') {
+                    throw new \Exception('Invalid status transition');
+                }
+
                 // Generate ticket number
                 $ticketNumber = $this->generateTicketNumber($id);
                 
@@ -671,13 +687,25 @@ class VisitorController extends Controller
                 ]);
             }
 
-            // Rejection
+            // Rejection rules
             if ($newStatus === 'Rejected') {
+                // Dept admin can reject only "For Review"
+                // Master admin can reject "For Review" or "Approved (1/2)"
+                $canReject = false;
+                if ($admin->deptID === 1 && in_array($currentStatus, ['For Review', 'Approved (1/2)'])) {
+                    $canReject = true;
+                } elseif ($admin->deptID !== 1 && $currentStatus === 'For Review') {
+                    $canReject = true;
+                }
+
+                if (!$canReject) {
+                    throw new \Exception('Invalid status transition');
+                }
+
                 DB::table('visitors')
                     ->where('id', $id)
                     ->update([
-                        'status' => 'Rejected',
-                        'updated_at' => now()
+                        'status' => 'Rejected'
                     ]);
 
                 DB::commit();
