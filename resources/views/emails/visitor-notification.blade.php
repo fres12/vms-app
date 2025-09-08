@@ -58,18 +58,32 @@
 
             @if(isset($data['ticket_number']) && isset($data['barcode']))
                 <?php
-                    // Try to embed as CID for better client compatibility
+                    // Enhanced format detection and embedding
                     $cid = null;
+                    $format = $data['barcode_format'] ?? 'svg';
+                    
                     try {
                         if (is_string($data['barcode']) && strpos($data['barcode'], 'data:') === 0 && strpos($data['barcode'], ';base64,') !== false) {
                             [$meta, $base64] = explode(';base64,', $data['barcode'], 2);
                             $mime = substr($meta, 5);
                             $binary = base64_decode($base64, true);
+                            
                             if ($binary !== false) {
-                                $isPng = strncmp($binary, "\x89PNG\r\n\x1a\n", 8) === 0;
-                                $looksSvg = !$isPng && (stripos(ltrim($binary), '<svg') === 0);
-                                $filename = $isPng ? 'qrcode.png' : ($looksSvg ? 'qrcode.svg' : 'qrcode');
-                                $mime = $isPng ? 'image/png' : ($looksSvg ? 'image/svg+xml' : $mime);
+                                // Better format detection
+                                $isPng = strncmp($binary, "\x89PNG\r\n\x1a\n", 8) === 0 || $format === 'png';
+                                $isSvg = !$isPng && (stripos(ltrim($binary), '<svg') === 0 || $format === 'svg');
+                                
+                                // Set appropriate filename and MIME type
+                                if ($isPng) {
+                                    $filename = 'qrcode.png';
+                                    $mime = 'image/png';
+                                } elseif ($isSvg) {
+                                    $filename = 'qrcode.svg';
+                                    $mime = 'image/svg+xml';
+                                } else {
+                                    $filename = 'qrcode.' . $format;
+                                }
+                                
                                 $cid = $message->embedData($binary, $filename, $mime);
                             }
                         }
@@ -83,10 +97,10 @@
                     <div style="text-align: center; background: white; padding: 15px; border: 1px solid #eee; border-radius: 4px;">
                         <img src="{{ $cid ?? $data['barcode'] }}"
                              alt="Visitor QR Code"
-                             style="width: 200px; height: 200px; display: inline-block;">
+                             style="width: 200px; height: 200px; display: inline-block; max-width: 100%;">
                     </div>
                     <p style="font-size: 12px; color: #666; margin-top: 15px; text-align: center;">
-                        Please show this visitor pass at the security checkpoint
+                        Please show this visitor pass at the security checkpoint<br>
                     </p>
                 </div>
             @endif

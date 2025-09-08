@@ -520,36 +520,97 @@ class VisitorController extends Controller
             $path = 'qrcodes';
             Storage::disk('public')->makeDirectory($path);
 
-            // Try PNG first (requires GD/Imagick)
+            // Enhanced PNG generation with better error handling
             try {
+                // Check if GD extension is available
+                if (!extension_loaded('gd') && !extension_loaded('imagick')) {
+                    throw new \Exception('Neither GD nor Imagick extension is available for PNG generation');
+                }
+
                 $png = QrCode::format('png')
                     ->size(400)
-                    ->margin(1)
-                    ->errorCorrection('M')
+                    ->margin(2)
+                    ->errorCorrection('H') // High error correction for better mobile scanning
                     ->generate($content);
+
+                // Validate PNG data
+                if (empty($png)) {
+                    throw new \Exception('Generated PNG data is empty');
+                }
+
+                // Verify it's actually PNG by checking magic bytes
+                if (substr($png, 0, 8) !== "\x89\x50\x4E\x47\x0D\x0A\x1A\x0A") {
+                    throw new \Exception('Generated data is not valid PNG format');
+                }
 
                 $filename = 'qrcode_' . preg_replace('/[^A-Za-z0-9\-]/', '_', $content) . '_' . time() . '.png';
                 $fullPath = $path . '/' . $filename;
 
                 if (!Storage::disk('public')->put($fullPath, $png)) {
-                    throw new \Exception('Failed to save QR code file to public storage');
+                    throw new \Exception('Failed to save QR code PNG to public storage');
                 }
+
+                \Log::info('QR code generated successfully as PNG', [
+                    'path' => $fullPath,
+                    'size' => strlen($png),
+                    'content' => $content
+                ]);
 
                 return [
                     'path' => $fullPath,
-                    'base64' => base64_encode($png)
+                    'base64' => base64_encode($png),
+                    'format' => 'png',
+                    'mime_type' => 'image/png'
                 ];
+
             } catch (\Throwable $e) {
-                \Log::warning('PNG QR generation failed, falling back to SVG', [
-                    'error' => $e->getMessage()
+                \Log::warning('PNG QR generation failed, trying alternative PNG method', [
+                    'error' => $e->getMessage(),
+                    'content' => $content
                 ]);
+
+                // Try alternative PNG generation approach
+                try {
+                    $png = QrCode::format('png')
+                        ->size(300)
+                        ->margin(1)
+                        ->errorCorrection('M')
+                        ->encoding('UTF-8')
+                        ->generate($content);
+
+                    if (!empty($png)) {
+                        $filename = 'qrcode_alt_' . preg_replace('/[^A-Za-z0-9\-]/', '_', $content) . '_' . time() . '.png';
+                        $fullPath = $path . '/' . $filename;
+
+                        if (Storage::disk('public')->put($fullPath, $png)) {
+                            \Log::info('QR code generated successfully with alternative PNG method', [
+                                'path' => $fullPath,
+                                'size' => strlen($png)
+                            ]);
+
+                            return [
+                                'path' => $fullPath,
+                                'base64' => base64_encode($png),
+                                'format' => 'png',
+                                'mime_type' => 'image/png'
+                            ];
+                        }
+                    }
+                } catch (\Throwable $altE) {
+                    \Log::warning('Alternative PNG generation also failed', [
+                        'error' => $altE->getMessage()
+                    ]);
+                }
+
+                // If PNG fails, try SVG as last resort
+                \Log::warning('All PNG methods failed, falling back to SVG');
             }
 
             // Fallback to SVG (no GD required)
             $svg = QrCode::format('svg')
                 ->size(400)
-                ->margin(1)
-                ->errorCorrection('M')
+                ->margin(2)
+                ->errorCorrection('H')
                 ->generate($content);
 
             $filename = 'qrcode_' . preg_replace('/[^A-Za-z0-9\-]/', '_', $content) . '_' . time() . '.svg';
@@ -559,14 +620,24 @@ class VisitorController extends Controller
                 throw new \Exception('Failed to save QR code SVG to public storage');
             }
 
+            \Log::warning('QR code generated as SVG fallback', [
+                'path' => $fullPath,
+                'size' => strlen($svg)
+            ]);
+
             return [
                 'path' => $fullPath,
-                'base64' => base64_encode($svg)
+                'base64' => base64_encode($svg),
+                'format' => 'svg',
+                'mime_type' => 'image/svg+xml'
             ];
+
         } catch (\Exception $e) {
-            \Log::error('QR code generation failed:', [
+            \Log::error('QR code generation failed completely:', [
                 'error' => $e->getMessage(),
-                'content' => $content
+                'content' => $content,
+                'gd_loaded' => extension_loaded('gd'),
+                'imagick_loaded' => extension_loaded('imagick')
             ]);
             return null;
         }
@@ -652,10 +723,20 @@ class VisitorController extends Controller
                 // Get QR code content and convert to proper data URI
                 try {
                     $qrContent = Storage::disk('public')->get($qrData['path']);
-                    $mimeType = 'image/svg+xml';
                     
-                    // Create proper data URI for SVG
+                    // Determine MIME type based on format
+                    $mimeType = $qrData['mime_type'] ?? 'image/svg+xml';
+                    $format = $qrData['format'] ?? 'svg';
+                    
+                    // Create proper data URI
                     $base64QrCode = 'data:' . $mimeType . ';base64,' . base64_encode($qrContent);
+
+                    \Log::info('Sending email with QR code', [
+                        'format' => $format,
+                        'mime_type' => $mimeType,
+                        'size' => strlen($qrContent),
+                        'ticket_number' => $ticketNumber
+                    ]);
 
                     // Send email with QR code
                     Mail::send(new VisitorNotification([
@@ -668,13 +749,14 @@ class VisitorController extends Controller
                         'status' => 'Approved',
                         'message' => 'Your visit request has been fully approved.',
                         'ticket_number' => $ticketNumber,
-                        'barcode' => $base64QrCode, // Send properly formatted data URI
+                        'barcode' => $base64QrCode,
+                        'barcode_format' => $format, // Add format info for email template
                         'to' => $visitor->email
                     ]));
                 } catch (\Exception $e) {
                     \Log::error('Failed to process or send QR code:', [
                         'error' => $e->getMessage(),
-                        'path' => $qrData['path']
+                        'path' => $qrData['path'] ?? 'unknown'
                     ]);
                 }
 
