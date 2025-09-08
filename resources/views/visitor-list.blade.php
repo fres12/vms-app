@@ -88,7 +88,7 @@
                             <th class="px-6 py-1 border text-white">Phone</th>
                             @if($isMasterAdmin)
                                 <th class="px-6 py-1 border text-white">PIC Name</th>
-                                <th class="px-6 py-1 border text-white">PIC Position</th>
+                                <th class="px-6 py-1 border text-white">Position</th>
                                 <th class="px-6 py-1 border text-white">Department</th>
                             @endif
                             <th class="px-10 py-1 border text-white">Visit Purpose</th>
