@@ -87,6 +87,8 @@
                             <th class="px-4 py-1 border text-white">Company</th>
                             <th class="px-6 py-1 border text-white">Phone</th>
                             @if($isMasterAdmin)
+                                <th class="px-6 py-1 border text-white">PIC Name</th>
+                                <th class="px-6 py-1 border text-white">PIC Position</th>
                                 <th class="px-6 py-1 border text-white">Department</th>
                             @endif
                             <th class="px-10 py-1 border text-white">Visit Purpose</th>
@@ -117,7 +119,9 @@
                                 <td class="p-1.5 border">{{ $visitor->company }}</td>
                                 <td class="p-1.5 border">{{ $visitor->phone }}</td>
                                 @if($isMasterAdmin)
-                                    <td class="p-1.5 border">{{ $visitor->department_name }}</td>
+                                    <td class="p-1.5 border">{{ $visitor->pic_name ?? '-' }}</td>
+                                    <td class="p-1.5 border">{{ $visitor->pic_position ?? '-' }}</td>
+                                    <td class="p-1.5 border">{{ $visitor->department_name ?? '-' }}</td>
                                 @endif
                                 <td class="p-1.5 border">{{ $visitor->visit_purpose }}</td>
                                 <td class="p-1.5 border">{{ \Carbon\Carbon::parse($visitor->startdate)->format('d-m-Y H:i') }}</td>
@@ -159,7 +163,6 @@
                                         -
                                     @endif
                                 </td>
-
                                 <td class="p-1.5 border">
                                     @if($visitor->approved_date)
                                         {{ \Carbon\Carbon::parse($visitor->approved_date)->format('d-m-Y H:i') }}
@@ -171,7 +174,7 @@
                             </tr>
                         @empty
                             <tr>
-                                <td colspan="{{ $isMasterAdmin ? 18 : 17 }}" class="text-center p-1.5">No visitors found.</td>
+                                <td colspan="{{ $isMasterAdmin ? 20 : 17 }}" class="text-center p-1.5">No visitors found.</td>
                             </tr>
                         @endforelse
                     </tbody>
