@@ -7,14 +7,6 @@ use App\Http\Controllers\VisitorController;
 use App\Http\Controllers\VisitorFormController;
 use App\Http\Controllers\BarcodeController;
 
-Route::get('/', function () {
-    return view('welcome');
-})->name('home');
-
-Route::view('dashboard', 'dashboard')
-    ->middleware(['auth', 'verified'])
-    ->name('dashboard');
-
 Route::middleware(['auth'])->group(function () {
     Route::redirect('settings', 'settings/profile');
 
@@ -29,8 +21,8 @@ Route::post('/login', [VisitorController::class, 'loginAdmin'])->name('login.sub
 Route::post('/logout', [VisitorController::class, 'logout'])->name('logout');
 
 // Route publik untuk form visitor
-Route::get('/visitor-form', [VisitorFormController::class, 'create'])->name('visitor.form');
-Route::post('/visitor-form', [VisitorController::class, 'store'])->name('visitor.store');
+Route::get('/', [VisitorFormController::class, 'create'])->name('visitor.form');
+Route::post('/', [VisitorController::class, 'store'])->name('visitor.store');
 
 // Contoh routes untuk barcode
 Route::get('/barcode', [BarcodeController::class, 'show'])->name('barcode.show');

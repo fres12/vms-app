@@ -71,6 +71,7 @@ class Kernel extends ConsoleKernel
      */
     protected $commands = [
         \App\Console\Commands\Inspire::class,
+        \App\Console\Commands\CheckVisitorDeadlines::class,
     ];
 
     /**
@@ -81,8 +82,12 @@ class Kernel extends ConsoleKernel
      */
     protected function schedule(Schedule $schedule)
     {
-        // Check visitor deadlines every hour
-        $schedule->command('visitors:check-deadlines')->hourly();
+        // Check visitor deadlines every minute (for testing)
+        // Change to ->dailyAt('12:00') for production
+        $schedule->command('visitors:check-deadlines')
+                 ->everyMinute()
+                 ->withoutOverlapping()
+                 ->appendOutputTo(storage_path('logs/visitors-check-schedule.log'));
     }
 
     /**
@@ -94,4 +99,4 @@ class Kernel extends ConsoleKernel
 
         require base_path('routes/console.php');
     }
-} 
+}
