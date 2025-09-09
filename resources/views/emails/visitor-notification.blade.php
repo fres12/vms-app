@@ -111,29 +111,20 @@
             <p>You can approve or decline this request by logging into the system.</p>
         @elseif($data['status'] === 'Needs Final Approval')
             <p style="color: #dc3545;"><strong>Important:</strong> Please approve before the deadline: {{ $data['deadline'] ?? 'H-2 12:00' }}</p>
-        @elseif($data['status'] === 'Declined' && isset($data['auto_declined']) && $data['auto_declined'])
-            <div style="margin-top: 20px; padding: 15px; background-color: #f8d7da; border: 1px solid #f5c6cb; border-radius: 4px;">
-                <h4 style="color: #721c24; margin-top: 0;">Auto-Declined Request</h4>
-                <p style="color: #721c24; margin-bottom: 10px;">
-                    <strong>Unfortunately, your visit request has been declined.</strong>
-                </p>
-                <p style="color: #721c24; margin-bottom: 10px;">
-                    We can't process your request was not processed within the required timeframe (H-2 12:00 from your visit start date).
-                </p>
-                @if(isset($data['deadline_date']))
-                    <p style="color: #721c24; margin-bottom: 0;">
-                        <strong>Deadline:</strong> {{ $data['deadline_date'] }}
-                    </p>
-                @endif
-                <p style="color: #721c24; margin-top: 10px;">
-                    If you still wish to visit, please submit a new request with sufficient lead time.
-                </p>
-            </div>
-        @elseif($data['status'] === 'Declined')
+        @elseif($data['status'] === 'Declined' || $data['status'] === 'Rejected')
             <div style="margin-top: 20px; padding: 15px; background-color: #f8d7da; border: 1px solid #f5c6cb; border-radius: 4px;">
                 <h4 style="color: #721c24; margin-top: 0;">Request Declined</h4>
                 <p style="color: #721c24;">
-                    Unfortunately, your visit request has been declined. Please contact the department for more information.
+                    Unfortunately, your visit request has been declined.
+                </p>
+                @if(isset($data['rejection_reason']) && !empty($data['rejection_reason']))
+                    <div style="margin-top: 15px; padding: 10px; background-color: #fff3cd; border: 1px solid #ffeaa7; border-radius: 4px;">
+                        <p style="color: #856404; margin: 0;"><strong>Reason:</strong></p>
+                        <p style="color: #856404; margin: 5px 0 0 0;">{{ $data['rejection_reason'] }}</p>
+                    </div>
+                @endif
+                <p style="color: #721c24; margin-top: 15px; margin-bottom: 0;">
+                    If you have questions about this decision, please contact the department for more information.
                 </p>
             </div>
         @endif

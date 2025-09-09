@@ -182,6 +182,42 @@
         </div>
     </div>
 
+    <!-- Decline Reason Modal -->
+    <div id="declineModal" class="fixed inset-0 bg-gray-600 bg-opacity-50 hidden items-center justify-center z-50">
+        <div class="bg-white rounded-lg p-6 w-96 max-w-md mx-4">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-lg font-medium text-gray-900">Decline Visitor</h3>
+                <button type="button" onclick="closeDeclineModal()" class="text-gray-400 hover:text-gray-600">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                    </svg>
+                </button>
+            </div>
+            <form id="declineForm">
+                <div class="mb-4">
+                    <label for="declineReason" class="block text-sm font-medium text-gray-700 mb-2">
+                        Reason for declining:
+                    </label>
+                    <textarea id="declineReason" name="reason" rows="4" required
+                              class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                              placeholder="Please provide a reason for declining this visitor request..."
+                              maxlength="500"></textarea>
+                    <p class="text-xs text-gray-500 mt-1">Maximum 500 characters</p>
+                </div>
+                <div class="flex justify-end space-x-3">
+                    <button type="button" onclick="closeDeclineModal()" 
+                            class="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-200 rounded-md hover:bg-gray-300">
+                        Cancel
+                    </button>
+                    <button type="submit" 
+                            class="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-md hover:bg-red-700">
+                        Decline Visitor
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
     <script>
         function toggleAllCheckboxes() {
             const mainCheckbox = document.getElementById('selectAll');
@@ -251,21 +287,39 @@
                 }
             }
 
-            async function updateSelectedStatus(action) {
-                try {
-                    const checkboxes = document.getElementsByClassName('visitor-checkbox');
-                    const selectedIds = Array.from(checkboxes)
-                        .filter(cb => cb.checked)
-                        .map(cb => cb.value);
+        let selectedVisitorIds = []; // Global variable to store selected IDs
 
-                    if (selectedIds.length === 0) {
-                        alert('Please select at least one visitor');
-                        return;
-                    }
+        // Modal functions
+        function showDeclineModal() {
+            document.getElementById('declineModal').classList.remove('hidden');
+            document.getElementById('declineModal').classList.add('flex');
+        }
 
-                    const isApprove = action === 'Approve Selected';
-                    const status = isApprove ? 'Accepted' : 'Rejected';
+        function closeDeclineModal() {
+            document.getElementById('declineModal').classList.add('hidden');
+            document.getElementById('declineModal').classList.remove('flex');
+            document.getElementById('declineReason').value = '';
+            selectedVisitorIds = [];
+        }
 
+        // Updated function to handle approve/decline
+        async function updateSelectedStatus(action) {
+            try {
+                const checkboxes = document.getElementsByClassName('visitor-checkbox');
+                const selectedIds = Array.from(checkboxes)
+                    .filter(cb => cb.checked)
+                    .map(cb => cb.value);
+
+                if (selectedIds.length === 0) {
+                    alert('Please select at least one visitor');
+                    return;
+                }
+
+                const isApprove = action === 'Approve Selected';
+                
+                if (isApprove) {
+                    // Handle approve directly
+                    const status = 'Accepted';
                     showLoadingOverlay();
                     
                     for (const id of selectedIds) {
@@ -290,14 +344,21 @@
 
                     // Reload table after all updates
                     await reloadTableData();
-                    
-                } catch (error) {
-                    alert(error.message || 'An error occurred while updating status');
-                    console.error('Error:', error);
-                } finally {
+                } else {
+                    // Handle decline - show modal
+                    selectedVisitorIds = selectedIds;
+                    showDeclineModal();
+                }
+                
+            } catch (error) {
+                alert(error.message || 'An error occurred while updating status');
+                console.error('Error:', error);
+            } finally {
+                if (action === 'Approve Selected') {
                     hideLoadingOverlay();
                 }
             }
+        }
 
             function exportSelected() {
                 const checkboxes = document.getElementsByClassName('visitor-checkbox');
@@ -387,6 +448,60 @@
                         }
                     }, 300); // Debounce delay
                 });
+
+                const declineForm = document.getElementById('declineForm');
+                if (declineForm) {
+                    declineForm.addEventListener('submit', async function(e) {
+                        e.preventDefault();
+                        
+                        const reason = document.getElementById('declineReason').value.trim();
+                        if (!reason) {
+                            alert('Please provide a reason for declining');
+                            return;
+                        }
+
+                        if (reason.length > 500) {
+                            alert('Reason is too long (max 500 characters)');
+                            return;
+                        }
+
+                        try {
+                            showLoadingOverlay();
+                            
+                            for (const id of selectedVisitorIds) {
+                                const response = await fetch(`/visitors/${id}/status`, {
+                                    method: 'POST',
+                                    headers: {
+                                        'Content-Type': 'application/json',
+                                        'Accept': 'application/json',
+                                        'X-CSRF-TOKEN': '{{ csrf_token() }}'
+                                    },
+                                    body: JSON.stringify({ 
+                                        status: 'Rejected',
+                                        reason: reason
+                                    })
+                                });
+
+                                const text = await response.text();
+                                let result;
+                                try { result = JSON.parse(text); } catch (_) { result = { success: false, message: text || 'Unknown error' }; }
+
+                                if (!response.ok || !result.success) {
+                                    throw new Error(result.message || `Request failed (${response.status})`);
+                                }
+                            }
+
+                            closeDeclineModal();
+                            await reloadTableData();
+                            
+                        } catch (error) {
+                            alert(error.message || 'An error occurred while declining visitors');
+                            console.error('Error:', error);
+                        } finally {
+                            hideLoadingOverlay();
+                        }
+                    });
+                }
             });
     </script>
 </body>

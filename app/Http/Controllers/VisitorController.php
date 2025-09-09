@@ -1,5 +1,4 @@
 <?php
-
 namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
@@ -771,6 +770,20 @@ class VisitorController extends Controller
 
             // Rejection rules
             if ($newStatus === 'Rejected') {
+                // Get rejection reason from request
+                $rejectionReason = $request->input('reason');
+                
+                if (empty($rejectionReason)) {
+                    throw new \Exception('Rejection reason is required');
+                }
+                
+                // Sanitize rejection reason
+                $rejectionReason = $this->sanitizeInput($rejectionReason);
+                
+                if (strlen($rejectionReason) > 500) {
+                    throw new \Exception('Rejection reason is too long (max 500 characters)');
+                }
+                
                 // Dept admin can reject only "For Review"
                 // Master admin can reject "For Review" or "Approved (1/2)"
                 $canReject = false;
@@ -784,11 +797,54 @@ class VisitorController extends Controller
                     throw new \Exception('Invalid status transition');
                 }
 
+                // Update visitor status to Rejected
                 DB::table('visitors')
                     ->where('id', $id)
                     ->update([
                         'status' => 'Rejected'
                     ]);
+                
+                // Save rejection reason to rejected_reasons table
+                DB::table('rejected_reasons')->insert([
+                    'idvisit' => $id,
+                    'reason' => $rejectionReason,
+                    'created_at' => now(),
+                    'updated_at' => now()
+                ]);
+                
+                // Get department info
+                $dept = DB::table('depts')
+                    ->where('deptID', $visitor->deptpurpose)
+                    ->first();
+                
+                // Send rejection email notification
+                try {
+                    Mail::to($visitor->email)->send(new VisitorNotification([
+                        'name' => $visitor->fullname,
+                        'company' => $visitor->company,
+                        'visit_purpose' => $visitor->visit_purpose,
+                        'startdate' => $visitor->startdate,
+                        'enddate' => $visitor->enddate,
+                        'department' => $dept ? $dept->nameDept : 'Unknown Department',
+                        'status' => 'Rejected',
+                        'message' => 'Unfortunately, your visit request has been declined.',
+                        'rejection_reason' => $rejectionReason,
+                        'to' => $visitor->email
+                    ]));
+                    
+                    \Log::info('Rejection email sent successfully', [
+                        'visitor_id' => $id,
+                        'email' => $visitor->email,
+                        'reason' => $rejectionReason
+                    ]);
+                } catch (\Exception $e) {
+                    \Log::error('Failed to send rejection notification', [
+                        'error' => $e->getMessage(),
+                        'visitor_id' => $id,
+                        'visitor_email' => $visitor->email
+                    ]);
+                    // Don't throw error - rejection should still succeed even if email fails
+                }
 
                 DB::commit();
                 return response()->json([
