@@ -10,7 +10,26 @@
         <p>Dear {{ isset($data['recipient_name']) ? $data['recipient_name'] : $data['name'] }},</p>
 
         <div style="margin: 20px 0;">
-            <p><strong>{{ $data['message'] }}</strong></p>
+            @if(in_array($data['status'] ?? '', ['Declined', 'Rejected']))
+                <div style="margin-bottom:12px;">
+                    @if(!empty($data['rejection_reason']))
+                        <p style="margin:0;">
+                            Unfortunately, your visit request has been declined because <strong>{{ $data['rejection_reason'] }}</strong>.
+                        </p>
+                    @else
+                        <p style="margin:0;">
+                            Unfortunately, your visit request has been declined.
+                        </p>
+                    @endif
+                    <p style="margin-top:8px;">
+                        If you have questions about this decision, please contact the contact person for more information or resubmit your request at another time.
+                    </p>
+                </div>
+            @else
+                @if(!empty($data['message']))
+                    <p><strong>{{ $data['message'] }}</strong></p>
+                @endif
+            @endif
             
             <h3 style="color: #003368;">Visitor Details:</h3>
             <table style="width: 100%; border-collapse: collapse; margin: 10px 0;">
@@ -112,21 +131,6 @@
         @elseif($data['status'] === 'Needs Final Approval')
             <p style="color: #dc3545;"><strong>Important:</strong> Please approve before the deadline: {{ $data['deadline'] ?? 'H-2 12:00' }}</p>
         @elseif($data['status'] === 'Declined' || $data['status'] === 'Rejected')
-            <div style="margin-top: 20px; padding: 15px; background-color: #f8d7da; border: 1px solid #f5c6cb; border-radius: 4px;">
-                <h4 style="color: #721c24; margin-top: 0;">Request Declined</h4>
-                <p style="color: #721c24;">
-                    Unfortunately, your visit request has been declined.
-                </p>
-                @if(isset($data['rejection_reason']) && !empty($data['rejection_reason']))
-                    <div style="margin-top: 15px; padding: 10px; background-color: #fff3cd; border: 1px solid #ffeaa7; border-radius: 4px;">
-                        <p style="color: #856404; margin: 0;"><strong>Reason:</strong></p>
-                        <p style="color: #856404; margin: 5px 0 0 0;">{{ $data['rejection_reason'] }}</p>
-                    </div>
-                @endif
-                <p style="color: #721c24; margin-top: 15px; margin-bottom: 0;">
-                    If you have questions about this decision, please contact the department for more information.
-                </p>
-            </div>
         @endif
 
         <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #eee;">

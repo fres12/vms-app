@@ -784,17 +784,23 @@ class VisitorController extends Controller
                     throw new \Exception('Rejection reason is too long (max 500 characters)');
                 }
                 
-                // Dept admin can reject only "For Review"
-                // Master admin can reject "For Review" or "Approved (1/2)"
+                // Determine who can reject:
+                // - Master admin (deptID === 1) may reject requests that reached 'Approved (1/2)'
+                // - Dept admin (non-master) may reject only requests for their department while status is 'For Review'
                 $canReject = false;
-                if ($admin->deptID === 1 && in_array($currentStatus, ['For Review', 'Approved (1/2)'])) {
-                    $canReject = true;
-                } elseif ($admin->deptID !== 1 && $currentStatus === 'For Review') {
-                    $canReject = true;
+                if ($admin->deptID === 1) {
+                    if ($currentStatus === 'Approved (1/2)') {
+                        $canReject = true;
+                    }
+                } else {
+                    // ensure this admin is responsible for the visitor's department
+                    if ((int)$visitor->deptpurpose === (int)$admin->deptID && $currentStatus === 'For Review') {
+                        $canReject = true;
+                    }
                 }
 
                 if (!$canReject) {
-                    throw new \Exception('Invalid status transition');
+                    throw new \Exception('You are not authorized to reject this request in its current state.');
                 }
 
                 // Update visitor status to Rejected
@@ -843,7 +849,7 @@ class VisitorController extends Controller
                         'visitor_id' => $id,
                         'visitor_email' => $visitor->email
                     ]);
-                    // Don't throw error - rejection should still succeed even if email fails
+                    // Don't throw - rejection succeeded even if email fails
                 }
 
                 DB::commit();

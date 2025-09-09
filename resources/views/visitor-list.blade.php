@@ -183,10 +183,29 @@
     </div>
 
     <!-- Decline Reason Modal -->
-    <div id="declineModal" class="fixed inset-0 bg-gray-600 bg-opacity-50 hidden items-center justify-center z-50">
-        <div class="bg-white rounded-lg p-6 w-96 max-w-md mx-4">
+    <style>
+        /* Modal overlay + panel animation */
+        .modal-overlay {
+            background-color: rgba(75, 85, 99, 0.45); /* gray semi-transparent */
+            backdrop-filter: blur(2px);
+        }
+        .modal-panel {
+            transform: scale(.97) translateY(6px);
+            opacity: 0;
+            transition: transform .22s cubic-bezier(.2,.9,.2,1), opacity .22s cubic-bezier(.2,.9,.2,1);
+        }
+        .modal-panel.show {
+            transform: scale(1) translateY(0);
+            opacity: 1;
+        }
+    </style>
+
+    <div id="declineModal" class="fixed inset-0 hidden items-center justify-center z-50" aria-hidden="true">
+        <div class="modal-overlay absolute inset-0"></div>
+
+        <div class="modal-panel relative bg-white rounded-lg p-6 w-96 max-w-md mx-4 shadow-lg" role="dialog" aria-modal="true" aria-labelledby="declineTitle">
             <div class="flex justify-between items-center mb-4">
-                <h3 class="text-lg font-medium text-gray-900">Decline Visitor</h3>
+                <h3 id="declineTitle" class="text-lg font-medium text-gray-900">Decline Visitor</h3>
                 <button type="button" onclick="closeDeclineModal()" class="text-gray-400 hover:text-gray-600">
                     <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
@@ -291,15 +310,41 @@
 
         // Modal functions
         function showDeclineModal() {
-            document.getElementById('declineModal').classList.remove('hidden');
-            document.getElementById('declineModal').classList.add('flex');
+            const modal = document.getElementById('declineModal');
+            const panel = modal.querySelector('.modal-panel');
+
+            // show overlay + panel container
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+            modal.setAttribute('aria-hidden', 'false');
+
+            // ensure panel animation triggers
+            panel.classList.remove('show');
+            // force a frame then add show for transition
+            requestAnimationFrame(() => panel.classList.add('show'));
         }
 
         function closeDeclineModal() {
-            document.getElementById('declineModal').classList.add('hidden');
-            document.getElementById('declineModal').classList.remove('flex');
-            document.getElementById('declineReason').value = '';
-            selectedVisitorIds = [];
+            const modal = document.getElementById('declineModal');
+            const panel = modal.querySelector('.modal-panel');
+
+            // play hide animation
+            panel.classList.remove('show');
+            modal.setAttribute('aria-hidden', 'true');
+
+            // after animation ends hide the container and reset form
+            const cleanup = () => {
+                modal.classList.add('hidden');
+                modal.classList.remove('flex');
+                document.getElementById('declineReason').value = '';
+                selectedVisitorIds = [];
+                panel.removeEventListener('transitionend', cleanup);
+            };
+
+            // if transition supported wait, otherwise cleanup immediately
+            panel.addEventListener('transitionend', cleanup);
+            // fallback timeout in case transitionend doesn't fire
+            setTimeout(cleanup, 300);
         }
 
         // Updated function to handle approve/decline
