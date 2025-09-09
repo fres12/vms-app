@@ -22,6 +22,7 @@
             <th>Barcode</th>
             <th>Approved Date</th>
             <th>Ticket Number</th>
+            <th>Remark</th>
         </tr>
     </thead>
     <tbody>
@@ -72,6 +73,7 @@
                     @endif
                 </td>
                 <td>{{ $visitor->ticket_number }}</td>
+                <td>{{ $visitor->rejected_reason ?? '-' }}</td>
             </tr>
         @endforeach
     </tbody>

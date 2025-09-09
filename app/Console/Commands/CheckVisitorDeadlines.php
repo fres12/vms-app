@@ -11,7 +11,7 @@ use App\Mail\VisitorNotification;
 class CheckVisitorDeadlines extends Command
 {
     protected $signature = 'visitors:check-deadlines';
-    protected $description = 'Check and auto-decline visitor requests past their deadline (H-2 day)';
+    protected $description = 'Check and auto-reject visitor requests past their deadline (H-2 day)';
 
     public function handle()
     {
@@ -61,15 +61,15 @@ class CheckVisitorDeadlines extends Command
                 ->where('deptID', $visitor->deptpurpose)
                 ->first();
 
-            // Update status to Declined
+            // Update status to Rejected
             DB::table('visitors')
                 ->where('id', $visitor->id)
                 ->update([
-                    'status' => 'Declined',
+                    'status' => 'Rejected',
                     'approved_date' => null
                 ]);
 
-            // Send decline notification
+            // Send rejection notification
             try {
                 Mail::to($visitor->email)->send(new VisitorNotification([
                     'name' => $visitor->fullname,
@@ -78,17 +78,15 @@ class CheckVisitorDeadlines extends Command
                     'startdate' => $visitor->startdate,
                     'enddate' => $visitor->enddate,
                     'department' => $dept ? $dept->nameDept : 'Unknown Department',
-                    'status' => 'Declined',
-                    'message' => 'Unfortunately, your visit request has been automatically declined because it was not processed before the deadline.',
-                    'auto_declined' => true,
-                    'deadline_date' => $today->format('d-m-Y'),
-                    'reason' => 'Auto-declined due to deadline',
+                    'status' => 'Rejected',
+                    'message' => 'Unfortunately, your visit request has been rejected because it was not processed before the deadline.',
+                    'rejection_reason' => 'Not processed before deadline (auto-rejected on ' . $today->format('d-m-Y') . ')',
                     'to' => $visitor->email
                 ]));
 
-                $this->line("✓ Auto-declined: {$visitor->fullname} (ID: {$visitor->id})");
+                $this->line("✓ Auto-rejected: {$visitor->fullname} (ID: {$visitor->id})");
             } catch (\Exception $e) {
-                \Log::error('Failed to send auto-decline notification', [
+                \Log::error('Failed to send auto-reject notification', [
                     'error' => $e->getMessage(),
                     'visitor_id' => $visitor->id,
                     'visitor_email' => $visitor->email
@@ -100,9 +98,9 @@ class CheckVisitorDeadlines extends Command
         }
 
         if ($declinedCount > 0) {
-            $this->info("Completed. Auto-declined {$declinedCount} requests.");
+            $this->info("Completed. Auto-rejected {$declinedCount} requests.");
         } else {
-            $this->info("No requests found for auto-decline today.");
+            $this->info("No requests found for auto-rejection today.");
         }
 
         return 0;

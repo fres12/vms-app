@@ -464,6 +464,7 @@ class VisitorController extends Controller
             ->select(
                 'visitors.*',
                 'depts.nameDept as department_name',
+                DB::raw('(SELECT rr.reason FROM rejected_reasons rr WHERE rr.idvisit = visitors.id ORDER BY rr.created_at DESC, rr.id DESC LIMIT 1) as rejected_reason'),
                 DB::raw("CASE 
                     WHEN visitors.idcardphoto IS NOT NULL 
                     THEN CONCAT('" . url('storage') . "//', visitors.idcardphoto)
@@ -677,6 +678,38 @@ class VisitorController extends Controller
                     throw new \Exception('Failed to update visitor status');
                 }
 
+                // Notify master admin for final approval
+                try {
+                    $masterAdmin = DB::table('accounts')
+                        ->where('deptID', 1)
+                        ->first();
+
+                    if ($masterAdmin) {
+                        $dept = DB::table('depts')->where('deptID', $visitor->deptpurpose)->first();
+                        Mail::send(new VisitorNotification([
+                            'recipient_name' => $masterAdmin->name,
+                            'name' => $visitor->fullname,
+                            'company' => $visitor->company,
+                            'visit_purpose' => $visitor->visit_purpose,
+                            'startdate' => $visitor->startdate,
+                            'enddate' => $visitor->enddate,
+                            'department' => $dept ? $dept->nameDept : 'Unknown Department',
+                            'status' => 'Needs Final Approval',
+                            'message' => "This visitor has been approved by {$dept->nameDept} department and needs your final approval.",
+                            'to' => $masterAdmin->email
+                        ]));
+                    } else {
+                        \Log::warning('Master admin not found when notifying final approval', [
+                            'visitor_id' => $id
+                        ]);
+                    }
+                } catch (\Throwable $e) {
+                    \Log::error('Failed to send master approval notification', [
+                        'error' => $e->getMessage(),
+                        'visitor_id' => $id
+                    ]);
+                }
+
                 DB::commit();
                 return response()->json([
                     'success' => true,
@@ -833,7 +866,7 @@ class VisitorController extends Controller
                         'enddate' => $visitor->enddate,
                         'department' => $dept ? $dept->nameDept : 'Unknown Department',
                         'status' => 'Rejected',
-                        'message' => 'Unfortunately, your visit request has been declined.',
+                        'message' => 'Unfortunately, your visit request has been rejected.',
                         'rejection_reason' => $rejectionReason,
                         'to' => $visitor->email
                     ]));

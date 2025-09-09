@@ -103,6 +103,7 @@
                             <th class="px-6 py-1 border text-center text-white">Barcode</th>
                             <th class="px-6 py-1 border text-center text-white">Approved Date</th>
                             <th class="px-14 py-1 border text-center text-white">Ticket Number</th>
+                            <th class="px-10 py-1 border text-center text-white">Remark</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -171,10 +172,13 @@
                                     @endif
                                 </td>
                                 <td class="p-1.5 border">{{ $visitor->ticket_number }}</td>
+                                <td class="p-1.5 border">
+                                    {{ optional(\DB::table('rejected_reasons')->where('idvisit', $visitor->id)->latest()->first())->reason ?? '-' }}
+                                </td>
                             </tr>
                         @empty
                             <tr>
-                                <td colspan="{{ $isMasterAdmin ? 20 : 17 }}" class="text-center p-1.5">No visitors found.</td>
+                                <td colspan="{{ $isMasterAdmin ? 21 : 18 }}" class="text-center p-1.5">No visitors found.</td>
                             </tr>
                         @endforelse
                     </tbody>
