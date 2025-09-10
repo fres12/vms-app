@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Visitor List - {{ $isMasterAdmin ? 'All Departments' : $deptInfo->nameDept }}</title>
     @vite('resources/css/app.css')
+    <script defer src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"></script>
 </head>
 <body class="bg-[#fbfbfc]">
     @include('layouts.admin-header')
@@ -27,25 +28,50 @@
 
         <!-- Table section -->
         <div class="bg-white dark:bg-neutral-900 p-8 px-4 sm:px-8 rounded-xl shadow mt-4">
-            <div class="flex justify-end items-center gap-1 mb-2">
-                <button type="button" 
-                        onclick="updateSelectedStatus('Approve Selected')" 
-                        style="background-color: #003368;"
-                        class="text-white px-3 py-1.5 rounded text-xs hover:bg-[#002244] transition-colors">
-                    Approve
-                </button>
-                <button type="button"
-                        onclick="updateSelectedStatus('Decline Selected')" 
-                        style="background-color: #003368;"
-                        class="text-white px-3 py-1.5 rounded text-xs hover:bg-[#002244] transition-colors">
-                    Decline
-                </button>
-                <button type="button"
-                        onclick="updateSelectedStatus('Export Selected')"
-                   style="background-color: #003368;"
-                   class="text-white px-3 py-1.5 rounded text-xs hover:bg-[#002244] transition-colors">
-                    Export
-                </button>
+            <!-- Update the buttons and search bar layout -->
+            <div class="flex justify-end items-center gap-4 mb-2">
+                <!-- Search bar first -->
+                <div class="w-64">
+                    <div class="relative">
+                        <input type="text" 
+                               id="searchInput" 
+                               name="search"
+                               placeholder="Search visitors..." 
+                               maxlength="100"
+                               pattern="[a-zA-Z0-9\s\-\_\@\.\,]*"
+                               class="w-full px-4 py-1.5 pr-10 text-xs border border-gray-300 rounded focus:outline-none focus:border-[#003368]"
+                               value="{{ $searchTerm ?? '' }}"
+                               autocomplete="off"
+                               spellcheck="false">
+                        <span class="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+                            </svg>
+                        </span>
+                    </div>
+                </div>
+
+                <!-- Action buttons after search -->
+                <div class="flex items-center gap-1">
+                    <button type="button" 
+                            onclick="updateSelectedStatus('Approve Selected')" 
+                            style="background-color: #003368;"
+                            class="text-white px-3 py-1.5 rounded text-xs hover:bg-[#002244] transition-colors">
+                        Approve
+                    </button>
+                    <button type="button"
+                            onclick="updateSelectedStatus('Decline Selected')" 
+                            style="background-color: #003368;"
+                            class="text-white px-3 py-1.5 rounded text-xs hover:bg-[#002244] transition-colors">
+                        Decline
+                    </button>
+                    <button type="button"
+                            onclick="exportSelected()"
+                            style="background-color: #003368;"
+                            class="text-white px-3 py-1.5 rounded text-xs hover:bg-[#002244] transition-colors">
+                        Export
+                    </button>
+                </div>
             </div>
 
             <div class="overflow-x-auto relative">
@@ -61,6 +87,8 @@
                             <th class="px-4 py-1 border text-white">Company</th>
                             <th class="px-6 py-1 border text-white">Phone</th>
                             @if($isMasterAdmin)
+                                <th class="px-6 py-1 border text-white">PIC Name</th>
+                                <th class="px-6 py-1 border text-white">Position</th>
                                 <th class="px-6 py-1 border text-white">Department</th>
                             @endif
                             <th class="px-10 py-1 border text-white">Visit Purpose</th>
@@ -71,8 +99,11 @@
                             <th class="px-3 py-1 border text-white">ID Card</th>
                             <th class="px-3 py-1 border text-white">Self Photo</th>
                             <th class="px-6 py-1 border text-center text-white">Submit Date</th>
-                            <th class="px-6 py-1 border text-center text-white">Status</th>
+                            <th class="px-3 py-1 border text-white">Status</th>
+                            <th class="px-6 py-1 border text-center text-white">Barcode</th>
                             <th class="px-6 py-1 border text-center text-white">Approved Date</th>
+                            <th class="px-14 py-1 border text-center text-white">Ticket Number</th>
+                            <th class="px-10 py-1 border text-center text-white">Remark</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -89,7 +120,9 @@
                                 <td class="p-1.5 border">{{ $visitor->company }}</td>
                                 <td class="p-1.5 border">{{ $visitor->phone }}</td>
                                 @if($isMasterAdmin)
-                                    <td class="p-1.5 border">{{ $visitor->department_name }}</td>
+                                    <td class="p-1.5 border">{{ $visitor->pic_name ?? '-' }}</td>
+                                    <td class="p-1.5 border">{{ $visitor->pic_position ?? '-' }}</td>
+                                    <td class="p-1.5 border">{{ $visitor->department_name ?? '-' }}</td>
                                 @endif
                                 <td class="p-1.5 border">{{ $visitor->visit_purpose }}</td>
                                 <td class="p-1.5 border">{{ \Carbon\Carbon::parse($visitor->startdate)->format('d-m-Y H:i') }}</td>
@@ -106,7 +139,7 @@
                                         <a href="{{ asset('storage/' . $visitor->selfphoto) }}" target="_blank" class="text-blue-600 underline">View</a>
                                     @endif
                                 </td>
-                                <td class="p-1.5 border">{{ \Carbon\Carbon::parse($visitor->submit_date)->format('d-m-Y H:i') }}</td>
+                                <td class="p-1.5 border">{{ $visitor->submit_date }}</td>
                                 <td class="p-1.5 border text-center">
                                     <span class="text-center 
                                         @if($isMasterAdmin && $visitor->status === 'Approved (1/2)')
@@ -116,6 +149,21 @@
                                         @endif
                                     ">{{ $visitor->status }}</span>
                                 </td>
+                                <td class="p-1.5 border text-center">
+                                    @if($visitor->barcode && $visitor->status === 'Approved (2/2)')
+                                        <a href="{{ route('barcode.view', $visitor->ticket_number) }}" 
+                                           target="_blank"
+                                           class="inline-flex items-center text-blue-600 hover:text-blue-800">
+                                            <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/>
+                                            </svg>
+                                            View QR
+                                        </a>
+                                    @else
+                                        -
+                                    @endif
+                                </td>
                                 <td class="p-1.5 border">
                                     @if($visitor->approved_date)
                                         {{ \Carbon\Carbon::parse($visitor->approved_date)->format('d-m-Y H:i') }}
@@ -123,14 +171,73 @@
                                         -
                                     @endif
                                 </td>
+                                <td class="p-1.5 border">{{ $visitor->ticket_number }}</td>
+                                <td class="p-1.5 border">
+                                    {{ optional(\DB::table('rejected_reasons')->where('idvisit', $visitor->id)->latest()->first())->reason ?? '-' }}
+                                </td>
                             </tr>
                         @empty
                             <tr>
-                                <td colspan="{{ $isMasterAdmin ? 18 : 17 }}" class="text-center p-1.5">No visitors found.</td>
+                                <td colspan="{{ $isMasterAdmin ? 21 : 18 }}" class="text-center p-1.5">No visitors found.</td>
                             </tr>
                         @endforelse
                     </tbody>
                 </table>
+        </div>
+    </div>
+
+    <!-- Decline Reason Modal -->
+    <style>
+        /* Modal overlay + panel animation */
+        .modal-overlay {
+            background-color: rgba(75, 85, 99, 0.45); /* gray semi-transparent */
+            backdrop-filter: blur(2px);
+        }
+        .modal-panel {
+            transform: scale(.97) translateY(6px);
+            opacity: 0;
+            transition: transform .22s cubic-bezier(.2,.9,.2,1), opacity .22s cubic-bezier(.2,.9,.2,1);
+        }
+        .modal-panel.show {
+            transform: scale(1) translateY(0);
+            opacity: 1;
+        }
+    </style>
+
+    <div id="declineModal" class="fixed inset-0 hidden items-center justify-center z-50" aria-hidden="true">
+        <div class="modal-overlay absolute inset-0"></div>
+
+        <div class="modal-panel relative bg-white rounded-lg p-6 w-96 max-w-md mx-4 shadow-lg" role="dialog" aria-modal="true" aria-labelledby="declineTitle">
+            <div class="flex justify-between items-center mb-4">
+                <h3 id="declineTitle" class="text-lg font-medium text-gray-900">Decline Visitor</h3>
+                <button type="button" onclick="closeDeclineModal()" class="text-gray-400 hover:text-gray-600">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                    </svg>
+                </button>
+            </div>
+            <form id="declineForm">
+                <div class="mb-4">
+                    <label for="declineReason" class="block text-sm font-medium text-gray-700 mb-2">
+                        Reason for declining:
+                    </label>
+                    <textarea id="declineReason" name="reason" rows="4" required
+                              class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                              placeholder="Please provide a reason for declining this visitor request..."
+                              maxlength="500"></textarea>
+                    <p class="text-xs text-gray-500 mt-1">Maximum 500 characters</p>
+                </div>
+                <div class="flex justify-end space-x-3">
+                    <button type="button" onclick="closeDeclineModal()" 
+                            class="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-200 rounded-md hover:bg-gray-300">
+                        Cancel
+                    </button>
+                    <button type="submit" 
+                            class="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-md hover:bg-red-700">
+                        Decline Visitor
+                    </button>
+                </div>
+            </form>
         </div>
     </div>
 
@@ -203,102 +310,248 @@
                 }
             }
 
-            async function updateSelectedStatus(action) {
-            const checkboxes = document.getElementsByClassName('visitor-checkbox');
-            const selectedIds = [];
-                const invalidStatusSelected = [];
-            
-            for (let checkbox of checkboxes) {
-                if (checkbox.checked) {
-                        const status = checkbox.getAttribute('data-status');
-                        const isMasterAdmin = {{ $isMasterAdmin ? 'true' : 'false' }};
-                        
-                        // Check if status can be changed
-                        if (action === 'Approve Selected') {
-                            if (isMasterAdmin && status !== 'Approved (1/2)') {
-                                invalidStatusSelected.push('Request approval to department admin first');
-                                continue;
-                            } else if (!isMasterAdmin && status !== 'For Review') {
-                                invalidStatusSelected.push('Invalid state to change status');
-                                continue;
-                            }
-                        } else if (action === 'Decline Selected') {
-                            if (status !== 'For Review') {
-                                invalidStatusSelected.push('Invalid state to change status');
-                                continue;
-                            }
-                        }
-                        
-                    selectedIds.push(checkbox.value);
-                }
-            }
+        let selectedVisitorIds = []; // Global variable to store selected IDs
 
-                if (selectedIds.length === 0 && invalidStatusSelected.length > 0) {
-                    alert(invalidStatusSelected[0]);
-                    return;
-                }
+        // Modal functions
+        function showDeclineModal() {
+            const modal = document.getElementById('declineModal');
+            const panel = modal.querySelector('.modal-panel');
 
-            if (selectedIds.length === 0) {
+            // show overlay + panel container
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+            modal.setAttribute('aria-hidden', 'false');
+
+            // ensure panel animation triggers
+            panel.classList.remove('show');
+            // force a frame then add show for transition
+            requestAnimationFrame(() => panel.classList.add('show'));
+        }
+
+        function closeDeclineModal() {
+            const modal = document.getElementById('declineModal');
+            const panel = modal.querySelector('.modal-panel');
+
+            // play hide animation
+            panel.classList.remove('show');
+            modal.setAttribute('aria-hidden', 'true');
+
+            // after animation ends hide the container and reset form
+            const cleanup = () => {
+                modal.classList.add('hidden');
+                modal.classList.remove('flex');
+                document.getElementById('declineReason').value = '';
+                selectedVisitorIds = [];
+                panel.removeEventListener('transitionend', cleanup);
+            };
+
+            // if transition supported wait, otherwise cleanup immediately
+            panel.addEventListener('transitionend', cleanup);
+            // fallback timeout in case transitionend doesn't fire
+            setTimeout(cleanup, 300);
+        }
+
+        // Updated function to handle approve/decline
+        async function updateSelectedStatus(action) {
+            try {
+                const checkboxes = document.getElementsByClassName('visitor-checkbox');
+                const selectedIds = Array.from(checkboxes)
+                    .filter(cb => cb.checked)
+                    .map(cb => cb.value);
+
+                if (selectedIds.length === 0) {
                     alert('Please select at least one visitor');
                     return;
                 }
 
-                if (action !== 'Export Selected' && invalidStatusSelected.length > 0) {
-                    alert(invalidStatusSelected[0]);
-                return;
+                const isApprove = action === 'Approve Selected';
+                
+                if (isApprove) {
+                    // Handle approve directly
+                    const status = 'Accepted';
+                    showLoadingOverlay();
+                    
+                    for (const id of selectedIds) {
+                        const response = await fetch(`/visitors/${id}/status`, {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'Accept': 'application/json',
+                                'X-CSRF-TOKEN': '{{ csrf_token() }}'
+                            },
+                            body: JSON.stringify({ status })
+                        });
+
+                        const text = await response.text();
+                        let result;
+                        try { result = JSON.parse(text); } catch (_) { result = { success: false, message: text || 'Unknown error' }; }
+
+                        if (!response.ok || !result.success) {
+                            throw new Error(result.message || `Request failed (${response.status})`);
+                        }
+                    }
+
+                    // Reload table after all updates
+                    await reloadTableData();
+                } else {
+                    // Handle decline - show modal
+                    selectedVisitorIds = selectedIds;
+                    showDeclineModal();
+                }
+                
+            } catch (error) {
+                alert(error.message || 'An error occurred while updating status');
+                console.error('Error:', error);
+            } finally {
+                if (action === 'Approve Selected') {
+                    hideLoadingOverlay();
+                }
             }
+        }
 
-            // Map action to status
-            const status = action === 'Approve Selected' ? 'Accepted' : 'Rejected';
+            function exportSelected() {
+                const checkboxes = document.getElementsByClassName('visitor-checkbox');
+                const selectedIds = Array.from(checkboxes)
+                    .filter(cb => cb.checked)
+                    .map(cb => cb.value);
 
-                // If it's an export action, handle differently
-                if (action === 'Export Selected') {
-                    window.location.href = '{{ route('visitors.export') }}?' + selectedIds.map(id => 'selected_ids[]=' + id).join('&');
+                if (selectedIds.length === 0) {
+                    alert('Please select at least one visitor');
                     return;
                 }
 
-                // Show loading overlay
-                showLoadingOverlay();
+                const params = new URLSearchParams();
+                selectedIds.forEach(id => params.append('selected_ids[]', id));
+                const url = `/visitors/export?${params.toString()}`;
+                window.location.href = url;
+            }
 
-                try {
-                    // Process all updates in parallel
-                    const updatePromises = selectedIds.map(id =>
-                fetch('/visitors/' + id + '/status', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-CSRF-TOKEN': '{{ csrf_token() }}'
-                    },
-                    body: JSON.stringify({ status })
-                }).then(res => res.json())
-                    );
-
-                    // Wait for all updates to complete
-                    const results = await Promise.all(updatePromises);
+            document.addEventListener('DOMContentLoaded', function() {
+                const searchInput = document.getElementById('searchInput');
+                let searchTimeout;
+                
+                searchInput.addEventListener('input', function(e) {
+                    // Clear previous timeout
+                    if (searchTimeout) {
+                        clearTimeout(searchTimeout);
+                    }
                     
-                    // Check if any update failed
-                    const failures = results.filter(result => !result.success);
-                    if (failures.length > 0) {
-                        throw new Error(failures[0].message || 'Failed to update some statuses');
-                    }
+                    // Sanitize input
+                    let searchTerm = e.target.value;
+                    searchTerm = searchTerm
+                        .replace(/[^a-zA-Z0-9\s\-\_\@\.,]/g, '') // Remove invalid characters
+                        .trim()
+                        .toLowerCase();
+                    
+                    // Debounce search to prevent DoS
+                    searchTimeout = setTimeout(() => {
+                        const tableRows = document.querySelectorAll('tbody tr');
+                        let hasVisibleRows = false;
+                        
+                        // Rate limiting
+                        if (searchTerm.length > 100) {
+                            searchTerm = searchTerm.substr(0, 100);
+                            searchInput.value = searchTerm;
+                        }
+                        
+                        tableRows.forEach(row => {
+                            if (row.classList.contains('no-results-row')) {
+                                row.remove();
+                                return;
+                            }
+                            
+                            let text = '';
+                            row.querySelectorAll('td').forEach((td, index) => {
+                                if (index > 0) { // Skip checkbox column
+                                    text += td.textContent + ' ';
+                                }
+                            });
+                            
+                            // Case-insensitive, sanitized search
+                            if (text.toLowerCase().includes(searchTerm)) {
+                                row.style.display = '';
+                                hasVisibleRows = true;
+                            } else {
+                                row.style.display = 'none';
+                            }
+                        });
+                        
+                        // Show/hide "No results" message with XSS prevention
+                        if (!hasVisibleRows && searchTerm) {
+                            const tbody = document.querySelector('tbody');
+                            const colspan = document.querySelectorAll('thead th').length;
+                            
+                            const noResultsRow = document.createElement('tr');
+                            noResultsRow.className = 'no-results-row';
+                            noResultsRow.innerHTML = `
+                                <td colspan="${colspan}" class="py-8 text-center">
+                                    <div class="flex flex-col items-center justify-center text-gray-500">
+                                        <svg class="w-12 h-12 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+                                        </svg>
+                                        <p class="text-sm font-medium">No matching results found</p>
+                                    </div>
+                                </td>
+                            `;
+                            tbody.appendChild(noResultsRow);
+                        }
+                    }, 300); // Debounce delay
+                });
 
-                    // Reload table data
-                    await reloadTableData();
+                const declineForm = document.getElementById('declineForm');
+                if (declineForm) {
+                    declineForm.addEventListener('submit', async function(e) {
+                        e.preventDefault();
+                        
+                        const reason = document.getElementById('declineReason').value.trim();
+                        if (!reason) {
+                            alert('Please provide a reason for declining');
+                            return;
+                        }
 
-                    // Uncheck all checkboxes
-                    document.getElementById('selectAll').checked = false;
-                    for (let checkbox of checkboxes) {
-                        checkbox.checked = false;
-                    }
+                        if (reason.length > 500) {
+                            alert('Reason is too long (max 500 characters)');
+                            return;
+                        }
 
-                } catch (error) {
-                    alert(error.message || 'An error occurred while updating status');
-                console.error('Error:', error);
-                } finally {
-                    // Hide loading overlay
-                    hideLoadingOverlay();
+                        try {
+                            showLoadingOverlay();
+                            
+                            for (const id of selectedVisitorIds) {
+                                const response = await fetch(`/visitors/${id}/status`, {
+                                    method: 'POST',
+                                    headers: {
+                                        'Content-Type': 'application/json',
+                                        'Accept': 'application/json',
+                                        'X-CSRF-TOKEN': '{{ csrf_token() }}'
+                                    },
+                                    body: JSON.stringify({ 
+                                        status: 'Rejected',
+                                        reason: reason
+                                    })
+                                });
+
+                                const text = await response.text();
+                                let result;
+                                try { result = JSON.parse(text); } catch (_) { result = { success: false, message: text || 'Unknown error' }; }
+
+                                if (!response.ok || !result.success) {
+                                    throw new Error(result.message || `Request failed (${response.status})`);
+                                }
+                            }
+
+                            closeDeclineModal();
+                            await reloadTableData();
+                            
+                        } catch (error) {
+                            alert(error.message || 'An error occurred while declining visitors');
+                            console.error('Error:', error);
+                        } finally {
+                            hideLoadingOverlay();
+                        }
+                    });
                 }
-        }
+            });
     </script>
 </body>
-</html> 
+</html>

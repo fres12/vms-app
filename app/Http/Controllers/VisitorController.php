@@ -1,5 +1,4 @@
 <?php
-
 namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
@@ -14,6 +13,8 @@ use Maatwebsite\Excel\Concerns\WithHeadings;
 use App\Models\Admin;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Storage;
+use SimpleSoftwareIO\QrCode\Facades\QrCode;
 
 class VisitorController extends Controller
 {
@@ -162,8 +163,28 @@ class VisitorController extends Controller
             $selfPhoto = $request->file('self_photo');
 
             // Validasi file type dan content
-            if (!$this->isValidImage($idCardPhoto) || !$this->isValidImage($selfPhoto)) {
-                throw new \Exception('Invalid image file');
+            if (!$this->isValidImage($idCardPhoto)) {
+                \Log::warning('Invalid ID card photo upload attempt', [
+                    'ip' => $request->ip(),
+                    'user_agent' => $request->userAgent(),
+                    'filename' => $idCardPhoto->getClientOriginalName(),
+                    'size' => $idCardPhoto->getSize(),
+                    'mime_type' => $idCardPhoto->getMimeType(),
+                    'extension' => $idCardPhoto->getClientOriginalExtension()
+                ]);
+                throw new \Exception('Invalid ID card photo file');
+            }
+
+            if (!$this->isValidImage($selfPhoto)) {
+                \Log::warning('Invalid self photo upload attempt', [
+                    'ip' => $request->ip(),
+                    'user_agent' => $request->userAgent(),
+                    'filename' => $selfPhoto->getClientOriginalName(),
+                    'size' => $selfPhoto->getSize(),
+                    'mime_type' => $selfPhoto->getMimeType(),
+                    'extension' => $selfPhoto->getClientOriginalExtension()
+                ]);
+                throw new \Exception('Invalid self photo file');
             }
 
             // Generate secure filename untuk mencegah path traversal
@@ -209,12 +230,12 @@ class VisitorController extends Controller
 
             // Get department admin
             $deptAdmin = DB::table('accounts')
-                ->where('deptID', $request->deptpurpose)
+                ->where('deptID', (int)$validated['deptpurpose'])
                 ->first();
 
             if (!$deptAdmin) {
                 \Log::error('Department admin not found', [
-                    'dept_id' => $request->deptpurpose
+                    'dept_id' => $validated['deptpurpose']
                 ]);
                 throw new \Exception('Department admin not found');
             }
@@ -222,11 +243,11 @@ class VisitorController extends Controller
             // Send email notification to department admin
             Mail::send(new VisitorNotification([
                 'recipient_name' => $deptAdmin->name,
-                'name' => $request->full_name,
-                'company' => $request->company,
-                'visit_purpose' => $request->visit_purpose,
-                'startdate' => $request->startdate,
-                'enddate' => $request->enddate,
+                'name' => $fullName,
+                'company' => $company,
+                'visit_purpose' => $visitPurpose,
+                'startdate' => $validated['startdate'],
+                'enddate' => $validated['enddate'],
                 'department' => $dept->nameDept,
                 'status' => 'For Review',
                 'message' => "A new visitor has requested approval for your department. Please review this request.",
@@ -259,50 +280,98 @@ class VisitorController extends Controller
             // Log error but don't expose details to user
             \Log::error('Error in visitor registration', [
                 'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
                 'ip' => $request->ip(),
                 'user_agent' => $request->userAgent()
             ]);
+            
+            // Return more specific error messages for common issues
+            $errorMessage = 'An error occurred while processing your registration. Please try again.';
+            
+            if (strpos($e->getMessage(), 'Invalid image file') !== false) {
+                $errorMessage = 'Please ensure you are uploading valid image files (JPG, JPEG, PNG) only.';
+            } elseif (strpos($e->getMessage(), 'Input too long') !== false) {
+                $errorMessage = 'One or more fields contain data that is too long. Please check your input.';
+            } elseif (strpos($e->getMessage(), 'Invalid email format') !== false) {
+                $errorMessage = 'Please enter a valid email address.';
+            } elseif (strpos($e->getMessage(), 'Department not found') !== false) {
+                $errorMessage = 'Selected department is not valid. Please try again.';
+            }
+            
             return redirect()->back()
                 ->withInput()
-                ->withErrors(['error' => 'An error occurred while processing your registration. Please try again.']);
+                ->withErrors(['error' => $errorMessage]);
         }
     }
 
-    public function index()
+    public function index(Request $request)
     {
-        $admin = auth()->guard('admin')->user();
-        
-        // Base query
-        $query = DB::table('visitors')
-            ->select(
-                'visitors.*',
-                'depts.nameDept as department_name',
-                'accounts.name as pic_name',
-                'accounts.position as pic_position',
-                'accounts.no_employee as pic_employee_id'
-            )
-            ->leftJoin('depts', 'visitors.deptpurpose', '=', 'depts.deptID')
-            ->leftJoin('accounts', 'visitors.deptpurpose', '=', 'accounts.deptID')
-            ->orderByDesc('visitors.submit_date');
+        try {
+            $admin = auth()->guard('admin')->user();
+            
+            // Sanitize search input
+            $searchTerm = $this->sanitizeSearchInput($request->get('search', ''));
+            
+            // Base query with security measures
+            $query = DB::table('visitors')
+                ->select(
+                    'visitors.*',
+                    'depts.nameDept as department_name',
+                    'accounts.name as pic_name',
+                    'accounts.position as pic_position',
+                    'accounts.no_employee as pic_employee_id'
+                )
+                ->leftJoin('depts', 'visitors.deptpurpose', '=', 'depts.deptID')
+                ->leftJoin('accounts', 'visitors.deptpurpose', '=', 'accounts.deptID')
+                ->orderByDesc('visitors.submit_date');
 
-        // If not master admin (deptID != 1), filter by target department
-        if ($admin->deptID !== 1) {
-            $query->where('visitors.deptpurpose', $admin->deptID);
+            // If search term exists, add secure search conditions
+            if (!empty($searchTerm)) {
+                $query->where(function($q) use ($searchTerm) {
+                    $q->whereRaw('LOWER(visitors.fullname) LIKE ?', ['%' . strtolower($searchTerm) . '%'])
+                      ->orWhereRaw('LOWER(visitors.email) LIKE ?', ['%' . strtolower($searchTerm) . '%'])
+                      ->orWhereRaw('LOWER(visitors.nik) LIKE ?', ['%' . strtolower($searchTerm) . '%'])
+                      ->orWhereRaw('LOWER(visitors.company) LIKE ?', ['%' . strtolower($searchTerm) . '%'])
+                      ->orWhereRaw('LOWER(visitors.phone) LIKE ?', ['%' . strtolower($searchTerm) . '%'])
+                      ->orWhereRaw('LOWER(visitors.visit_purpose) LIKE ?', ['%' . strtolower($searchTerm) . '%'])
+                      ->orWhereRaw('LOWER(depts.nameDept) LIKE ?', ['%' . strtolower($searchTerm) . '%']);
+                });
+            }
+
+            // Department filter for non-master admin
+            if ($admin->deptID !== 1) {
+                $query->where('visitors.deptpurpose', $admin->deptID);
+            }
+
+            // Get department info for header
+            $deptInfo = DB::table('depts')
+                ->where('deptID', $admin->deptID)
+                ->first();
+
+            // Execute query with limits
+            $visitors = $query->limit(1000)->get(); // Limit results for performance
+
+            return view('visitor-list', [
+                'visitors' => $visitors,
+                'isMasterAdmin' => $admin->deptID === 1,
+                'deptInfo' => $deptInfo,
+                'searchTerm' => $searchTerm
+            ]);
+
+        } catch (\Exception $e) {
+            \Log::error('Error in visitor list:', [
+                'error' => $e->getMessage(),
+                'user_id' => $admin->id ?? null,
+                'search' => $searchTerm ?? null
+            ]);
+            
+            return view('visitor-list', [
+                'visitors' => collect([]),
+                'isMasterAdmin' => $admin->deptID === 1,
+                'deptInfo' => $deptInfo ?? null,
+                'error' => 'An error occurred while loading the visitor list.'
+            ]);
         }
-
-        $visitors = $query->get();
-
-        // Get department info for header
-        $deptInfo = DB::table('depts')
-            ->where('deptID', $admin->deptID)
-            ->first();
-
-        return view('visitor-list', [
-            'visitors' => $visitors,
-            'isMasterAdmin' => $admin->deptID === 1,
-            'deptInfo' => $deptInfo,
-            'isDeptPurpose' => true // This will be true since we already filter by deptID above
-        ]);
     }
 
     public function approve($id)
@@ -327,8 +396,7 @@ class VisitorController extends Controller
             }
 
             DB::table('visitors')->where('id', $id)->update([
-                'status' => 'Accepted',
-                'updated_at' => now()
+                'status' => 'Accepted'
             ]);
 
             return view('visitor-response', [
@@ -368,8 +436,7 @@ class VisitorController extends Controller
             }
 
             DB::table('visitors')->where('id', $id)->update([
-                'status' => 'Rejected',
-                'updated_at' => now()
+                'status' => 'Rejected'
             ]);
 
             return view('visitor-response', [
@@ -397,16 +464,22 @@ class VisitorController extends Controller
             ->select(
                 'visitors.*',
                 'depts.nameDept as department_name',
+                DB::raw('(SELECT rr.reason FROM rejected_reasons rr WHERE rr.idvisit = visitors.id ORDER BY rr.created_at DESC, rr.id DESC LIMIT 1) as rejected_reason'),
                 DB::raw("CASE 
                     WHEN visitors.idcardphoto IS NOT NULL 
-                    THEN CONCAT('" . url('storage') . "/', visitors.idcardphoto)
+                    THEN CONCAT('" . url('storage') . "//', visitors.idcardphoto)
                     ELSE NULL 
                 END as id_card_url"),
                 DB::raw("CASE 
                     WHEN visitors.selfphoto IS NOT NULL 
-                    THEN CONCAT('" . url('storage') . "/', visitors.selfphoto)
+                    THEN CONCAT('" . url('storage') . "//', visitors.selfphoto)
                     ELSE NULL 
-                END as self_photo_url")
+                END as self_photo_url"),
+                DB::raw("CASE
+                    WHEN visitors.ticket_number IS NOT NULL AND visitors.barcode IS NOT NULL
+                    THEN CONCAT('" . url('/barcode') . "/', visitors.ticket_number)
+                    ELSE NULL
+                END as barcode_url")
             )
             ->leftJoin('depts', 'visitors.deptpurpose', '=', 'depts.deptID')
             ->orderByDesc('visitors.submit_date');
@@ -437,197 +510,399 @@ class VisitorController extends Controller
         return 'VMS-' . date('Ymd') . '-' . str_pad($visitorId, 4, '0', STR_PAD_LEFT);
     }
 
-    private function generateBarcode($ticketNumber)
+    private function generateQrCode($content)
     {
-        $generator = new \Picqer\Barcode\BarcodeGeneratorPNG();
-        return base64_encode($generator->getBarcode($ticketNumber, $generator::TYPE_CODE_128));
+        try {
+            if (!class_exists(\SimpleSoftwareIO\QrCode\Facades\QrCode::class)) {
+                throw new \Exception('QR code package is not installed. Run: composer require simplesoftwareio/simple-qrcode');
+            }
+
+            $path = 'qrcodes';
+            Storage::disk('public')->makeDirectory($path);
+
+            // Enhanced PNG generation with better error handling
+            try {
+                // Check if GD extension is available
+                if (!extension_loaded('gd') && !extension_loaded('imagick')) {
+                    throw new \Exception('Neither GD nor Imagick extension is available for PNG generation');
+                }
+
+                $png = QrCode::format('png')
+                    ->size(400)
+                    ->margin(2)
+                    ->errorCorrection('H') // High error correction for better mobile scanning
+                    ->generate($content);
+
+                // Validate PNG data
+                if (empty($png)) {
+                    throw new \Exception('Generated PNG data is empty');
+                }
+
+                // Verify it's actually PNG by checking magic bytes
+                if (substr($png, 0, 8) !== "\x89\x50\x4E\x47\x0D\x0A\x1A\x0A") {
+                    throw new \Exception('Generated data is not valid PNG format');
+                }
+
+                $filename = 'qrcode_' . preg_replace('/[^A-Za-z0-9\-]/', '_', $content) . '_' . time() . '.png';
+                $fullPath = $path . '/' . $filename;
+
+                if (!Storage::disk('public')->put($fullPath, $png)) {
+                    throw new \Exception('Failed to save QR code PNG to public storage');
+                }
+
+                \Log::info('QR code generated successfully as PNG', [
+                    'path' => $fullPath,
+                    'size' => strlen($png),
+                    'content' => $content
+                ]);
+
+                return [
+                    'path' => $fullPath,
+                    'base64' => base64_encode($png),
+                    'format' => 'png',
+                    'mime_type' => 'image/png'
+                ];
+
+            } catch (\Throwable $e) {
+                \Log::warning('PNG QR generation failed, trying alternative PNG method', [
+                    'error' => $e->getMessage(),
+                    'content' => $content
+                ]);
+
+                // Try alternative PNG generation approach
+                try {
+                    $png = QrCode::format('png')
+                        ->size(300)
+                        ->margin(1)
+                        ->errorCorrection('M')
+                        ->encoding('UTF-8')
+                        ->generate($content);
+
+                    if (!empty($png)) {
+                        $filename = 'qrcode_alt_' . preg_replace('/[^A-Za-z0-9\-]/', '_', $content) . '_' . time() . '.png';
+                        $fullPath = $path . '/' . $filename;
+
+                        if (Storage::disk('public')->put($fullPath, $png)) {
+                            \Log::info('QR code generated successfully with alternative PNG method', [
+                                'path' => $fullPath,
+                                'size' => strlen($png)
+                            ]);
+
+                            return [
+                                'path' => $fullPath,
+                                'base64' => base64_encode($png),
+                                'format' => 'png',
+                                'mime_type' => 'image/png'
+                            ];
+                        }
+                    }
+                } catch (\Throwable $altE) {
+                    \Log::warning('Alternative PNG generation also failed', [
+                        'error' => $altE->getMessage()
+                    ]);
+                }
+
+                // If PNG fails, try SVG as last resort
+                \Log::warning('All PNG methods failed, falling back to SVG');
+            }
+
+            // Fallback to SVG (no GD required)
+            $svg = QrCode::format('svg')
+                ->size(400)
+                ->margin(2)
+                ->errorCorrection('H')
+                ->generate($content);
+
+            $filename = 'qrcode_' . preg_replace('/[^A-Za-z0-9\-]/', '_', $content) . '_' . time() . '.svg';
+            $fullPath = $path . '/' . $filename;
+
+            if (!Storage::disk('public')->put($fullPath, $svg)) {
+                throw new \Exception('Failed to save QR code SVG to public storage');
+            }
+
+            \Log::warning('QR code generated as SVG fallback', [
+                'path' => $fullPath,
+                'size' => strlen($svg)
+            ]);
+
+            return [
+                'path' => $fullPath,
+                'base64' => base64_encode($svg),
+                'format' => 'svg',
+                'mime_type' => 'image/svg+xml'
+            ];
+
+        } catch (\Exception $e) {
+            \Log::error('QR code generation failed completely:', [
+                'error' => $e->getMessage(),
+                'content' => $content,
+                'gd_loaded' => extension_loaded('gd'),
+                'imagick_loaded' => extension_loaded('imagick')
+            ]);
+            return null;
+        }
     }
 
     public function updateStatus(Request $request, $id)
     {
         try {
             DB::beginTransaction();
-
-            $request->validate([
-                'status' => 'required|in:Accepted,Rejected',
-            ]);
-
-            // Check if visitor exists
+            
             $visitor = DB::table('visitors')->where('id', $id)->first();
             if (!$visitor) {
                 throw new \Exception('Visitor not found');
             }
 
-            // Get current admin's deptID
             $admin = auth()->guard('admin')->user();
-            if (!$admin) {
-                throw new \Exception('Admin not authenticated');
+            $newStatus = $request->status;
+            $currentStatus = $visitor->status;
+
+            // Block changes if already final
+            if (in_array($currentStatus, ['Rejected', 'Approved (2/2)'])) {
+                throw new \Exception('This visitor has already been processed.');
             }
 
-            // Check if admin is master admin
-            $isMasterAdmin = $admin->deptID === 1;
-            
-            // Check if admin is the target department
-            $isDeptPurpose = $admin->deptID === $visitor->deptpurpose;
-
-            // Get department info
-            $dept = DB::table('depts')
-                ->where('deptID', $visitor->deptpurpose)
-                ->first();
-
-            if (!$dept) {
-                throw new \Exception('Department not found');
-            }
-
-            // Check if visit date is within allowed timeframe (before H-2 12:00)
-            $visitStartDate = Carbon::parse($visitor->startdate);
-            $deadlineDate = $visitStartDate->copy()->subDays(2)->setTime(12, 0, 0);
-            $now = Carbon::now();
-
-            if ($now->greaterThan($deadlineDate)) {
-                $newStatus = 'Declined';
-                $message = 'Request automatically declined as it is past the deadline (H-2 12:00)';
-            } else {
-                if ($request->status === 'Accepted') {
-                    if ($isMasterAdmin) {
-                        if ($visitor->status !== 'Approved (1/2)') {
-                            throw new \Exception('Request approval to department admin first');
-                        }
-                        $newStatus = 'Approved (2/2)';
-                    } else if ($isDeptPurpose) {
-                        if ($visitor->status !== 'For Review') {
-                            throw new \Exception('Invalid state to change status');
-                        }
-                        $newStatus = 'Approved (1/2)';
-                    } else {
-                        throw new \Exception('You are not authorized to approve this visitor');
-                    }
-                } else {
-                    if ($visitor->status !== 'For Review') {
-                        throw new \Exception('Invalid state to change status');
-                    }
-                    if (!$isMasterAdmin && !$isDeptPurpose) {
-                        throw new \Exception('You are not authorized to decline this visitor');
-                    }
-                    $newStatus = 'Declined';
+            // Department Admin Approval (First Level)
+            if ($newStatus === 'Accepted' && $admin->deptID !== 1) {
+                if ($currentStatus !== 'For Review') {
+                    throw new \Exception('Invalid status transition');
                 }
-            }
 
-            // Generate ticket number and barcode for final approval
-            $ticketNumber = null;
-            $barcode = null;
-            if ($newStatus === 'Approved (2/2)') {
-                $ticketNumber = $this->generateTicketNumber($id);
-                $barcode = $this->generateBarcode($ticketNumber);
-            }
-
-            // Update visitor status
-            $updated = DB::table('visitors')
-                ->where('id', $id)
-                ->update([
-                    'status' => $newStatus,
-                    'approved_date' => $newStatus === 'Approved (2/2)' ? now() : null,
-                    'ticket_number' => $ticketNumber,
-                    'barcode' => $barcode
-                ]);
-
-            if (!$updated) {
-                throw new \Exception('Failed to update visitor status');
-            }
-
-            DB::commit();
-
-            // Send email notifications based on new status
-            if ($newStatus === 'Approved (1/2)') {
-                // Get master admin
-                $masterAdmin = DB::table('accounts')
-                    ->where('deptID', 1)
-                    ->first();
-
-                if ($masterAdmin) {
-                    \Log::info('Sending email to master admin', [
-                        'master_admin_email' => $masterAdmin->email,
-                        'visitor_id' => $id,
-                        'status' => $newStatus
+                $updated = DB::table('visitors')
+                    ->where('id', $id)
+                    ->update([
+                        'status' => 'Approved (1/2)'
                     ]);
 
+                if (!$updated) {
+                    throw new \Exception('Failed to update visitor status');
+                }
+
+                // Notify master admin for final approval
+                try {
+                    $masterAdmin = DB::table('accounts')
+                        ->where('deptID', 1)
+                        ->first();
+
+                    if ($masterAdmin) {
+                        $dept = DB::table('depts')->where('deptID', $visitor->deptpurpose)->first();
+                        Mail::send(new VisitorNotification([
+                            'recipient_name' => $masterAdmin->name,
+                            'name' => $visitor->fullname,
+                            'company' => $visitor->company,
+                            'visit_purpose' => $visitor->visit_purpose,
+                            'startdate' => $visitor->startdate,
+                            'enddate' => $visitor->enddate,
+                            'department' => $dept ? $dept->nameDept : 'Unknown Department',
+                            'status' => 'Needs Final Approval',
+                            'message' => "This visitor has been approved by {$dept->nameDept} department and needs your final approval.",
+                            'to' => $masterAdmin->email
+                        ]));
+                    } else {
+                        \Log::warning('Master admin not found when notifying final approval', [
+                            'visitor_id' => $id
+                        ]);
+                    }
+                } catch (\Throwable $e) {
+                    \Log::error('Failed to send master approval notification', [
+                        'error' => $e->getMessage(),
+                        'visitor_id' => $id
+                    ]);
+                }
+
+                DB::commit();
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Status updated to Approved (1/2)',
+                    'status' => 'Approved (1/2)'
+                ]);
+            }
+
+            // Master Admin Final Approval (Second Level)
+            if ($newStatus === 'Accepted' && $admin->deptID === 1) {
+                if ($currentStatus !== 'Approved (1/2)') {
+                    throw new \Exception('Invalid status transition');
+                }
+
+                // Generate ticket number
+                $ticketNumber = $this->generateTicketNumber($id);
+                
+                // Generate QR code
+                $qrData = $this->generateQrCode($ticketNumber);
+                if (!$qrData) {
+                    throw new \Exception('Failed to generate QR code');
+                }
+
+                // Update visitor status
+                $updated = DB::table('visitors')
+                    ->where('id', $id)
+                    ->update([
+                        'status' => 'Approved (2/2)',
+                        'approved_date' => now(),
+                        'ticket_number' => $ticketNumber,
+                        'barcode' => $qrData['path']
+                    ]);
+
+                if (!$updated) {
+                    throw new \Exception('Failed to update visitor data');
+                }
+
+                // Get department info
+                $dept = DB::table('depts')
+                    ->where('deptID', $visitor->deptpurpose)
+                    ->first();
+
+                // Get QR code content and convert to proper data URI
+                try {
+                    $qrContent = Storage::disk('public')->get($qrData['path']);
+                    
+                    // Determine MIME type based on format
+                    $mimeType = $qrData['mime_type'] ?? 'image/svg+xml';
+                    $format = $qrData['format'] ?? 'svg';
+                    
+                    // Create proper data URI
+                    $base64QrCode = 'data:' . $mimeType . ';base64,' . base64_encode($qrContent);
+
+                    \Log::info('Sending email with QR code', [
+                        'format' => $format,
+                        'mime_type' => $mimeType,
+                        'size' => strlen($qrContent),
+                        'ticket_number' => $ticketNumber
+                    ]);
+
+                    // Send email with QR code
                     Mail::send(new VisitorNotification([
-                        'recipient_name' => $masterAdmin->name,
                         'name' => $visitor->fullname,
                         'company' => $visitor->company,
                         'visit_purpose' => $visitor->visit_purpose,
                         'startdate' => $visitor->startdate,
                         'enddate' => $visitor->enddate,
                         'department' => $dept->nameDept,
-                        'status' => 'Needs Final Approval',
-                        'deadline' => $deadlineDate->format('d-m-Y H:i'),
-                        'message' => "This visitor has been approved by {$dept->nameDept} department and needs your final approval.",
-                        'to' => $masterAdmin->email
+                        'status' => 'Approved',
+                        'message' => 'Your visit request has been fully approved.',
+                        'ticket_number' => $ticketNumber,
+                        'barcode' => $base64QrCode,
+                        'barcode_format' => $format, // Add format info for email template
+                        'to' => $visitor->email
                     ]));
-
-                    \Log::info('Email sent successfully to master admin', [
-                        'master_admin_email' => $masterAdmin->email,
-                        'visitor_id' => $id
-                    ]);
-                } else {
-                    \Log::error('Master admin not found', [
-                        'visitor_id' => $id
+                } catch (\Exception $e) {
+                    \Log::error('Failed to process or send QR code:', [
+                        'error' => $e->getMessage(),
+                        'path' => $qrData['path'] ?? 'unknown'
                     ]);
                 }
-            } elseif ($newStatus === 'Approved (2/2)') {
-                Mail::send(new VisitorNotification([
-                    'name' => $visitor->fullname,
-                    'company' => $visitor->company,
-                    'visit_purpose' => $visitor->visit_purpose,
-                    'startdate' => $visitor->startdate,
-                    'enddate' => $visitor->enddate,
-                    'department' => $dept->nameDept,
-                    'status' => 'Approved',
-                    'message' => 'Your visit request has been fully approved.',
-                    'ticket_number' => $ticketNumber,
-                    'barcode' => $barcode,
-                    'to' => $visitor->email
-                ]));
-            } elseif ($newStatus === 'Declined') {
-                Mail::send(new VisitorNotification([
-                    'name' => $visitor->fullname,
-                    'company' => $visitor->company,
-                    'visit_purpose' => $visitor->visit_purpose,
-                    'startdate' => $visitor->startdate,
-                    'enddate' => $visitor->enddate,
-                    'department' => $dept->nameDept,
-                    'status' => 'Declined',
-                    'message' => isset($message) ? $message : 'Your visit request has been declined.',
-                    'to' => $visitor->email
-                ]));
+
+                DB::commit();
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Status updated to Approved (2/2)',
+                    'status' => 'Approved (2/2)',
+                    'approved_date' => now()->format('d-m-Y H:i')
+                ]);
             }
 
-            // Format the approved_date for response
-            $approvedDate = null;
-            if ($newStatus === 'Approved (2/2)') {
-                $approvedDate = Carbon::now()->format('d-m-Y H:i');
+            // Rejection rules
+            if ($newStatus === 'Rejected') {
+                // Get rejection reason from request
+                $rejectionReason = $request->input('reason');
+                
+                if (empty($rejectionReason)) {
+                    throw new \Exception('Rejection reason is required');
+                }
+                
+                // Sanitize rejection reason
+                $rejectionReason = $this->sanitizeInput($rejectionReason);
+                
+                if (strlen($rejectionReason) > 500) {
+                    throw new \Exception('Rejection reason is too long (max 500 characters)');
+                }
+                
+                // Determine who can reject:
+                // - Master admin (deptID === 1) may reject requests that reached 'Approved (1/2)'
+                // - Dept admin (non-master) may reject only requests for their department while status is 'For Review'
+                $canReject = false;
+                if ($admin->deptID === 1) {
+                    if ($currentStatus === 'Approved (1/2)') {
+                        $canReject = true;
+                    }
+                } else {
+                    // ensure this admin is responsible for the visitor's department
+                    if ((int)$visitor->deptpurpose === (int)$admin->deptID && $currentStatus === 'For Review') {
+                        $canReject = true;
+                    }
+                }
+
+                if (!$canReject) {
+                    throw new \Exception('You are not authorized to reject this request in its current state.');
+                }
+
+                // Update visitor status to Rejected
+                DB::table('visitors')
+                    ->where('id', $id)
+                    ->update([
+                        'status' => 'Rejected'
+                    ]);
+                
+                // Save rejection reason to rejected_reasons table
+                DB::table('rejected_reasons')->insert([
+                    'idvisit' => $id,
+                    'reason' => $rejectionReason,
+                    'created_at' => now(),
+                    'updated_at' => now()
+                ]);
+                
+                // Get department info
+                $dept = DB::table('depts')
+                    ->where('deptID', $visitor->deptpurpose)
+                    ->first();
+                
+                // Send rejection email notification
+                try {
+                    Mail::to($visitor->email)->send(new VisitorNotification([
+                        'name' => $visitor->fullname,
+                        'company' => $visitor->company,
+                        'visit_purpose' => $visitor->visit_purpose,
+                        'startdate' => $visitor->startdate,
+                        'enddate' => $visitor->enddate,
+                        'department' => $dept ? $dept->nameDept : 'Unknown Department',
+                        'status' => 'Rejected',
+                        'message' => 'Unfortunately, your visit request has been rejected.',
+                        'rejection_reason' => $rejectionReason,
+                        'to' => $visitor->email
+                    ]));
+                    
+                    \Log::info('Rejection email sent successfully', [
+                        'visitor_id' => $id,
+                        'email' => $visitor->email,
+                        'reason' => $rejectionReason
+                    ]);
+                } catch (\Exception $e) {
+                    \Log::error('Failed to send rejection notification', [
+                        'error' => $e->getMessage(),
+                        'visitor_id' => $id,
+                        'visitor_email' => $visitor->email
+                    ]);
+                    // Don't throw - rejection succeeded even if email fails
+                }
+
+                DB::commit();
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Status updated to Rejected',
+                    'status' => 'Rejected'
+                ]);
             }
 
-            return response()->json([
-                'success' => true,
-                'status' => $newStatus,
-                'approved_date' => $approvedDate,
-                'ticket_number' => $ticketNumber,
-                'barcode' => $barcode,
-                'message' => isset($message) ? $message : 'Status updated successfully'
-            ]);
+            throw new \Exception('Invalid status update request');
 
         } catch (\Exception $e) {
             DB::rollBack();
-            \Log::error('Error updating visitor status', [
-                'error' => $e->getMessage(),
-                'trace' => $e->getTraceAsString(),
-                'visitor_id' => $id ?? null
-            ]);
+            \Log::error('Status update failed:', ['error' => $e->getMessage()]);
+            
             return response()->json([
                 'success' => false,
                 'message' => $e->getMessage()
-            ]);
+            ], 400);
         }
     }
 
@@ -809,43 +1084,203 @@ class VisitorController extends Controller
     }
 
     /**
+     * Sanitize search input to prevent SQL injection and XSS
+     * @param string $input
+     * @return string
+     */
+    private function sanitizeSearchInput($input)
+    {
+        if (empty($input)) {
+            return '';
+        }
+
+        // Remove any non-alphanumeric characters except spaces and common symbols
+        $input = preg_replace('/[^a-zA-Z0-9\s\-\_\@\.\,]/', '', $input);
+        
+        // Remove SQL injection characters
+        $input = str_replace(
+            ['\'', '"', ';', '*', '=', 'OR', 'AND', '--'], 
+            '', 
+            $input
+        );
+        
+        // Convert special characters to HTML entities
+        $input = htmlspecialchars($input, ENT_QUOTES, 'UTF-8');
+        
+        // Limit length
+        $input = substr($input, 0, 100);
+        
+        return trim($input);
+    }
+
+    /**
      * Validate image file untuk mencegah malicious uploads
      */
     private function isValidImage($file)
     {
-        if (!$file || !$file->isValid()) {
+        try {
+            if (!$file || !$file->isValid()) {
+                return false;
+            }
+
+            // Check file extension
+            $allowedExtensions = ['jpg', 'jpeg', 'png'];
+            $extension = strtolower($file->getClientOriginalExtension());
+            
+            if (!in_array($extension, $allowedExtensions)) {
+                return false;
+            }
+
+            // Check MIME type
+            $allowedMimes = ['image/jpeg', 'image/jpg', 'image/png'];
+            $mimeType = $file->getMimeType();
+            
+            if (!in_array($mimeType, $allowedMimes)) {
+                return false;
+            }
+
+            // Check file size (max 2MB)
+            if ($file->getSize() > 2 * 1024 * 1024) {
+                return false;
+            }
+
+            // Additional check: verify it's actually an image
+            $imageInfo = getimagesize($file->getPathname());
+            if ($imageInfo === false) {
+                return false;
+            }
+
+            // Check image dimensions untuk mencegah DoS (lebih longgar)
+            if ($imageInfo[0] > 8000 || $imageInfo[1] > 8000) {
+                return false;
+            }
+
+            // Check magic bytes untuk mencegah polyglot files (optional untuk performance)
+            if (!$this->hasValidMagicBytes($file)) {
+                return false;
+            }
+
+            // Check untuk PHP code dalam file (optional untuk performance)
+            if ($this->containsPHPCode($file)) {
+                return false;
+            }
+
+            return true;
+        } catch (\Exception $e) {
+            \Log::error('Error validating image file', [
+                'error' => $e->getMessage(),
+                'filename' => $file ? $file->getClientOriginalName() : 'unknown'
+            ]);
             return false;
         }
-
-        // Check file extension
-        $allowedExtensions = ['jpg', 'jpeg', 'png'];
-        $extension = strtolower($file->getClientOriginalExtension());
-        
-        if (!in_array($extension, $allowedExtensions)) {
-            return false;
-        }
-
-        // Check MIME type
-        $allowedMimes = ['image/jpeg', 'image/jpg', 'image/png'];
-        $mimeType = $file->getMimeType();
-        
-        if (!in_array($mimeType, $allowedMimes)) {
-            return false;
-        }
-
-        // Check file size (max 2MB)
-        if ($file->getSize() > 2 * 1024 * 1024) {
-            return false;
-        }
-
-        // Additional check: verify it's actually an image
-        $imageInfo = getimagesize($file->getPathname());
-        if ($imageInfo === false) {
-            return false;
-        }
-
-        return true;
     }
+
+    /**
+     * Check magic bytes untuk mencegah polyglot files
+     */
+    private function hasValidMagicBytes($file)
+    {
+        try {
+            $handle = fopen($file->getPathname(), 'rb');
+            if (!$handle) {
+                return true; // Skip magic byte check if can't open file
+            }
+
+            // Read first 12 bytes untuk check magic bytes
+            $header = fread($handle, 12);
+            fclose($handle);
+
+            if (strlen($header) < 3) {
+                return true; // Skip if file too small
+            }
+
+            // JPEG magic bytes: FF D8 FF
+            $jpegMagic = "\xFF\xD8\xFF";
+            
+            // PNG magic bytes: 89 50 4E 47 0D 0A 1A 0A
+            $pngMagic = "\x89\x50\x4E\x47\x0D\x0A\x1A\x0A";
+
+            // Check untuk valid image magic bytes
+            if (strpos($header, $jpegMagic) === 0) {
+                return true;
+            }
+
+            if (strpos($header, $pngMagic) === 0) {
+                return true;
+            }
+
+            // If magic bytes don't match, log but don't block (for compatibility)
+            \Log::warning('Magic bytes validation failed', [
+                'filename' => $file->getClientOriginalName(),
+                'header' => bin2hex(substr($header, 0, 8))
+            ]);
+            
+            return true; // Allow file to pass for now
+        } catch (\Exception $e) {
+            \Log::error('Error checking magic bytes', ['error' => $e->getMessage()]);
+            return true; // Skip magic byte check on error
+        }
+    }
+
+    /**
+     * Check untuk PHP code dalam file
+     */
+    private function containsPHPCode($file)
+    {
+        try {
+            $handle = fopen($file->getPathname(), 'rb');
+            if (!$handle) {
+                return false;
+            }
+
+            // Read first 1KB of file content (for performance)
+            $content = fread($handle, 1024);
+            fclose($handle);
+
+            // Check untuk PHP tags (most common)
+            $phpPatterns = [
+                '/<\?php/i',
+                '/<\?=/i',
+                '/<\?/i',
+                '/\?>$/i',
+            ];
+
+            foreach ($phpPatterns as $pattern) {
+                if (preg_match($pattern, $content)) {
+                    \Log::warning('PHP code detected in uploaded file', [
+                        'filename' => $file->getClientOriginalName(),
+                        'pattern' => $pattern
+                    ]);
+                    return true;
+                }
+            }
+
+            // Check untuk dangerous functions (optional)
+            $dangerousPatterns = [
+                '/eval\s*\(/i',
+                '/system\s*\(/i',
+                '/exec\s*\(/i',
+                '/shell_exec\s*\(/i',
+            ];
+
+            foreach ($dangerousPatterns as $pattern) {
+                if (preg_match($pattern, $content)) {
+                    \Log::warning('Dangerous function detected in uploaded file', [
+                        'filename' => $file->getClientOriginalName(),
+                        'pattern' => $pattern
+                    ]);
+                    return true;
+                }
+            }
+
+            return false;
+        } catch (\Exception $e) {
+            \Log::error('Error checking PHP code', ['error' => $e->getMessage()]);
+            return false;
+        }
+    }
+
+
 
     /**
      * Generate secure filename untuk mencegah path traversal
@@ -879,5 +1314,89 @@ class VisitorController extends Controller
         $request->session()->regenerateToken();
         
         return redirect()->route('login');
+    }
+
+    public function changePassword(Request $request) 
+    {
+        try {
+            $admin = Auth::guard('admin')->user();
+            $currentPasswordValid = false;
+
+            // First try MD5 check
+            $md5Match = DB::table('accounts')
+                ->where('id', $admin->id)
+                ->where('password', md5($request->current_password))
+                ->exists();
+
+            if ($md5Match) {
+                $currentPasswordValid = true;
+            }
+            // If MD5 fails, try bcrypt
+            elseif (Hash::check($request->current_password, $admin->password)) {
+                $currentPasswordValid = true;
+            }
+
+            if (!$currentPasswordValid) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Wrong current password'
+                ]);
+            }
+
+            // Validate new password match
+            if ($request->new_password !== $request->new_password_confirmation) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'New password and confirmation do not match'
+                ]);
+            }
+
+            // Update with new MD5 hashed password
+            $updated = DB::table('accounts')
+                ->where('id', $admin->id)
+                ->update([
+                    'password' => md5($request->new_password)
+                ]);
+
+            if (!$updated) {
+                throw new \Exception('Failed to update password');
+            }
+
+            Auth::guard('admin')->logout();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Password changed successfully'
+            ]);
+
+        } catch (\Exception $e) {
+            \Log::error('Password change error:', [
+                'error' => $e->getMessage(),
+                'user_id' => $admin->id ?? null
+            ]);
+            
+            return response()->json([
+                'success' => false,
+                'message' => 'An error occurred while changing password'
+            ]);
+        }
+    }
+
+    public function viewBarcode($ticket_number)
+    {
+        $visitor = DB::table('visitors')->where('ticket_number', $ticket_number)->first();
+        if (!$visitor || !$visitor->barcode) {
+            abort(404);
+        }
+
+        $storagePath = ltrim($visitor->barcode, '/');
+        if (!Storage::disk('public')->exists($storagePath)) {
+            abort(404);
+        }
+
+        $data = Storage::disk('public')->get($storagePath);
+        $ext = strtolower(pathinfo($storagePath, PATHINFO_EXTENSION));
+        $mime = $ext === 'svg' ? 'image/svg+xml' : 'image/png';
+        return response($data)->header('Content-Type', $mime);
     }
 }
